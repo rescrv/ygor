@@ -221,12 +221,12 @@ class SSH(object):
             for r in rl:
                 r.recv()
         for host in hosts:
+            cls._output(host.location, 'stdout', host.out_stdout)
+            cls._output(host.location, 'stderr', host.out_stderr)
+        for host in hosts:
             if status is not None and host.exit_status != status:
                 raise RuntimeError('Host %s failed to execute %s' %
                                    (host.location, command))
-        for host in hosts:
-            cls._output(host.location, 'stdout', host.out_stdout)
-            cls._output(host.location, 'stderr', host.out_stderr)
 
     @classmethod
     def scp(cls, host, src, dst):
@@ -356,6 +356,16 @@ def get_experiment(path):
         raise RuntimeError('No class %s in module %s.' % (cls, mod))
 
 
+def experiment_output_path(args, exp, trial_name):
+    ps = exp.get_parameter_string()
+    path = os.path.join(args.experiment, ps, trial_name)
+    if args.name:
+        path += '-' + args.name
+    if os.path.exists(path) and not args.overwrite:
+        raise RuntimeError('Experiment already run.  '
+                           'To run, erase:\n' + path)
+    return path
+
 def run(argv):
     parser = argparse.ArgumentParser()
     parser.add_argument('-p', '--param', '--parameter',
@@ -374,13 +384,9 @@ def run(argv):
     for trial_name in args.trials:
         if not hasattr(exp, trial_name):
             raise RuntimeError('Experiment has no trial %s' % trial_name)
-        ps = exp.get_parameter_string()
-        path = os.path.join(args.experiment, ps, trial_name)
-        if args.name:
-            path += '-' + args.name
-        if os.path.exists(path) and not args.overwrite:
-            raise RuntimeError('Experiment already run.  '
-                               'To run, erase:\n' + path)
+        path = experiment_output_path(args, exp, trial_name)
+    for trial_name in args.trials:
+        path = experiment_output_path(args, exp, trial_name)
         try:
             tmp = tempfile.mkdtemp(prefix='ygor-', dir='.')
             exp.output = tmp
@@ -421,20 +427,3 @@ def configure(argv):
         cp.set('hosts', h + '[0].workspace', '<workspace>')
         cp.set('hosts', h + '[0].path', '<path>')
     cp.write(sys.stdout)
-
-
-def main(argv):
-    commands = {'run': run,
-                'configure': configure}
-    if len(argv) == 0 or argv[0] not in commands:
-        print('usage: ygor.py command [arguments [arguments ...]]', file=sys.stderr)
-        return 1
-    return commands[argv[0]](argv[1:])
-
-
-if __name__ == '__main__':
-    try:
-        sys.exit(main(sys.argv[1:]))
-    except RuntimeError as e:
-        print(e, file=sys.stderr)
-        sys.exit(1)

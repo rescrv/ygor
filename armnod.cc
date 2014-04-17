@@ -130,9 +130,9 @@ struct armnod_generator_variable_length : public armnod_generator
 struct seekable_engine
 {
     typedef uint64_t result_type;
-    seekable_engine();
+    seekable_engine(uint64_t bits);
     uint64_t min() const { return 0; }
-    uint64_t max() const { return UINT64_MAX; }
+    uint64_t max() const { return cached_max; }
     uint64_t generate();
     void seek(uint64_t idx);
 
@@ -140,9 +140,14 @@ struct seekable_engine
         seekable_engine(const seekable_engine&);
         seekable_engine& operator = (const seekable_engine&);
         void next();
+        uint64_t bits;
         uint64_t key_idx;
         RC4_KEY key;
         unsigned char buffer[sizeof(uint64_t)];
+        uint64_t number;
+        unsigned iters;
+        uint64_t cached_max;
+        uint64_t cached_iters;
 };
 
 struct seekable_engine_wrapper
@@ -656,9 +661,14 @@ armnod_generator_variable_length :: reset()
 
 //////////////////////////// Fixed-Length Generator ////////////////////////////
 
-seekable_engine :: seekable_engine()
-    : key_idx()
+seekable_engine :: seekable_engine(uint64_t b)
+    : bits(b)
+    , key_idx()
     , key()
+    , number(0)
+    , iters(0)
+    , cached_max((1 << bits) - 1)
+    , cached_iters(64 / bits)
 {
     seek(key_idx);
 }
@@ -666,9 +676,17 @@ seekable_engine :: seekable_engine()
 uint64_t
 seekable_engine :: generate()
 {
-    uint64_t x;
-    e::unpack64be(buffer, &x);
-    next();
+    assert(iters > 0);
+
+    uint64_t x = number & ((1 << bits) - 1);
+    number = number >> bits;
+    --iters;
+
+    if (iters == 0)
+    {
+        next();
+    }
+
     return x;
 }
 
@@ -692,6 +710,8 @@ seekable_engine :: next()
     unsigned char ciphertext[sizeof(uint64_t)];
     RC4(&key, sizeof(uint64_t), buffer, ciphertext);
     memmove(buffer, ciphertext, sizeof(uint64_t));
+    e::unpack64be(buffer, &number);
+    iters = cached_iters;
 }
 
 armnod_generator_fixed :: armnod_generator_fixed(const armnod_config* ac)
@@ -700,10 +720,20 @@ armnod_generator_fixed :: armnod_generator_fixed(const armnod_config* ac)
     , string_chooser_engine()
     , string_chooser_dist()
     , string_chooser(string_chooser_engine, string_chooser_dist)
-    , alphabet_engine(new seekable_engine())
+    , alphabet_engine()
     , alphabet_dist()
     , alphabet_idx(seekable_engine_wrapper(alphabet_engine.get()), alphabet_dist)
 {
+    size_t alpha_sz = config->alphabet.size();
+    size_t bits = 0;
+
+    while (alpha_sz > 0)
+    {
+        alpha_sz >>= 1;
+        ++bits;
+    }
+
+    alphabet_engine.reset(new seekable_engine(bits));
     reset();
 }
 

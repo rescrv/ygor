@@ -159,6 +159,7 @@ struct armnod_generator;
 struct armnod_generator* armnod_generator_create(const struct armnod_config* ac);
 void armnod_generator_destroy(struct armnod_generator* ag);
 void armnod_generator_seed(struct armnod_generator* ag, uint64_t s);
+const char* armnod_generate_idx(struct armnod_generator* ag, uint64_t idx); // only for method=fixed
 const char* armnod_generate(struct armnod_generator* ag);
 
 #ifdef __cplusplus

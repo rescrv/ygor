@@ -93,6 +93,7 @@ struct armnod_generator
     virtual ~armnod_generator() throw ();
 
     virtual void seed(uint64_t s) = 0;
+    virtual const char* generate_idx(uint64_t idx) = 0;
     virtual const char* generate() = 0;
 
     const armnod_config* config;
@@ -110,6 +111,7 @@ struct armnod_generator_variable_length : public armnod_generator
     virtual ~armnod_generator_variable_length() throw ();
 
     virtual void seed(uint64_t s);
+    virtual const char* generate_idx(uint64_t idx);
     virtual const char* generate();
 
     void reset();
@@ -168,6 +170,7 @@ struct armnod_generator_fixed : public armnod_generator
     virtual ~armnod_generator_fixed() throw ();
 
     virtual void seed(uint64_t s);
+    virtual const char* generate_idx(uint64_t idx);
     virtual const char* generate();
 
     void reset();
@@ -341,6 +344,12 @@ YGOR_API void
 armnod_generator_seed(struct armnod_generator* ag, uint64_t s)
 {
     return ag->seed(s);
+}
+
+YGOR_API const char*
+armnod_generate_idx(struct armnod_generator* ag, uint64_t idx)
+{
+    return ag->generate_idx(idx);
 }
 
 YGOR_API const char*
@@ -602,6 +611,12 @@ armnod_generator_variable_length :: seed(uint64_t s)
 }
 
 const char*
+armnod_generator_variable_length :: generate_idx(uint64_t)
+{
+    return NULL;
+}
+
+const char*
 armnod_generator_variable_length :: generate()
 {
     size_t length = length_gen->generate();
@@ -704,9 +719,8 @@ armnod_generator_fixed :: seed(uint64_t s)
 }
 
 const char*
-armnod_generator_fixed :: generate()
+armnod_generator_fixed :: generate_idx(uint64_t idx)
 {
-    size_t idx = string_chooser();
     alphabet_engine->seek(idx);
     assert(buffer.size() > 0);
     size_t length = buffer.size() - 1;
@@ -720,6 +734,13 @@ armnod_generator_fixed :: generate()
 
     buffer[length] = '\0';
     return &buffer.front();
+}
+
+const char*
+armnod_generator_fixed :: generate()
+{
+    size_t idx = string_chooser();
+    return generate_idx(idx);
 }
 
 void

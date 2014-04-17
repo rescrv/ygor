@@ -43,6 +43,7 @@ main(int argc, const char* argv[])
     const char* method = "normal";
     bool set_size_trip = false;
     long set_size = 1024;
+    bool sequential = false;
 
     e::argparser apg;
     std::auto_ptr<armnod_argparser> apl(armnod_argparser::create(""));
@@ -55,6 +56,9 @@ main(int argc, const char* argv[])
              .description("number of strings to generate when using --method=fixed")
              .metavar("NUM")
              .as_long(&set_size).set_true(&set_size_trip);
+    apg.arg().long_name("sequential")
+             .description("generate all strings when using --method=fixed")
+             .set_true(&sequential);
     apg.add("Generator:", apl->parser());
 
     if (!apg.parse(argc, argv))
@@ -87,20 +91,41 @@ main(int argc, const char* argv[])
     armnod_generator* gen(armnod_generator_create(apl->config()));
     armnod_generator_seed(gen, 0);
 
-    while (true)
+    if (sequential && strcmp(method, "fixed") == 0)
     {
-        sigpending(&mask);
-
-        if (sigismember(&mask, SIGHUP) ||
-            sigismember(&mask, SIGINT) ||
-            sigismember(&mask, SIGTERM) ||
-            sigismember(&mask, SIGPIPE) ||
-            sigismember(&mask, SIGKILL))
+        for (long i = 0; i < set_size; ++i)
         {
-            break;
-        }
+            sigpending(&mask);
 
-        std::cout << armnod_generate(gen) << "\n";
+            if (sigismember(&mask, SIGHUP) ||
+                sigismember(&mask, SIGINT) ||
+                sigismember(&mask, SIGTERM) ||
+                sigismember(&mask, SIGPIPE) ||
+                sigismember(&mask, SIGKILL))
+            {
+                break;
+            }
+
+            std::cout << armnod_generate_idx(gen, i) << "\n";
+        }
+    }
+    else
+    {
+        while (true)
+        {
+            sigpending(&mask);
+
+            if (sigismember(&mask, SIGHUP) ||
+                sigismember(&mask, SIGINT) ||
+                sigismember(&mask, SIGTERM) ||
+                sigismember(&mask, SIGPIPE) ||
+                sigismember(&mask, SIGKILL))
+            {
+                break;
+            }
+
+            std::cout << armnod_generate(gen) << "\n";
+        }
     }
 
     std::cout << std::flush;

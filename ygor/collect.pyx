@@ -63,13 +63,18 @@ cdef class DataLogger:
 
     def __dealloc__(self):
         if self.dl:
-            ygor_data_logger_flush_and_destroy(self.dl)
-            self.dl = NULL
+            self.flush_and_destroy()
 
     def record(self, long flags, long when, long data):
         cdef ygor_data_record ydr
-        ydr.flags = flags;
-        ydr.when = when;
-        ydr.data = data;
+        assert(self.dl)
+        ydr.flags = flags
+        ydr.when = when
+        ydr.data = data
         if ygor_data_logger_record(self.dl, &ydr) < 0:
             raise RuntimeError("could not log data record")
+
+    def flush_and_destroy(self):
+        assert(self.dl)
+        ygor_data_logger_flush_and_destroy(self.dl)
+        self.dl = NULL

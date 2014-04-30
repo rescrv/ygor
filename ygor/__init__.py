@@ -358,6 +358,10 @@ class Parameter(object):
     def __str__(self):
         return str(self.value)
 
+    def as_int(self):
+        assert isinstance(self.value, int)
+        return self.value
+
     def cast(self, value):
         try:
             return Parameter(type(self.value)(value))

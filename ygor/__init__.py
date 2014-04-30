@@ -212,18 +212,22 @@ class SSH(object):
 
     @classmethod
     def ssh(cls, hosts, command, status):
-        hosts = [SSH.HostState(h, w, p, command) for h, w, p in hosts]
-        while any([h.exit_status is None for h in hosts]):
-            for h in hosts:
+        states = [SSH.HostState(h, w, p, command) for h, w, p in hosts]
+        return cls.ssh_wait(states, command, status)
+
+    @classmethod
+    def ssh_wait(cls, states, command, status):
+        while any([h.exit_status is None for h in states]):
+            for h in states:
                 h.nonblocking_recv()
-            active = [h for h in hosts if h.exit_status is None]
+            active = [h for h in states if h.exit_status is None]
             rl, wl, xl = select.select(active, [], [], 1.0)
             for r in rl:
                 r.recv()
-        for host in hosts:
+        for host in states:
             cls._output(host.location, 'stdout', host.out_stdout)
             cls._output(host.location, 'stderr', host.out_stderr)
-        for host in hosts:
+        for host in states:
             if status is not None and host.exit_status != status:
                 raise RuntimeError('Host %s failed to execute %s' %
                                    (host.location, command))
@@ -290,6 +294,11 @@ class Host(object):
 
 class HostSet(object):
 
+    class Index(object):
+
+        def __init__(self, func):
+            self.func = func
+
     def __init__(self, name):
         self.exp = None
         self.name = name
@@ -315,6 +324,22 @@ class HostSet(object):
         command = ' '.join([pipes.quote(str(arg)) for arg in command])
         print('run on', self.name + ':', command)
         SSH.ssh(self.hosts, command, status)
+
+    def run_many(self, command, status=0, number=None):
+        if number is None:
+            number = len(self.hosts)
+        def deindex(i, arg):
+            if isinstance(arg, HostSet.Index):
+                return arg.func(i)
+            return arg
+        print('run on', self.name + ':', command)
+        states = []
+        for idx in range(number):
+            commandp = [deindex(idx, a) for a in command]
+            commandp = ' '.join([pipes.quote(str(arg)) for arg in commandp])
+            h = self.hosts[idx % len(self.hosts)]
+            states.append(SSH.HostState(h[0], h[1], h[2], commandp))
+        SSH.ssh_wait(states, command, status)
 
     def collect(self, save_as, copy_from=None):
         copy_from = copy_from or save_as

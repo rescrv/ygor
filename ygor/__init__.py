@@ -185,7 +185,9 @@ class SSH(object):
 
         @property
         def fileno(self):
-            return self.stdout.channel.fileno
+            if isinstance(self.stdout.channel.fileno, int):
+                return self.stdout.channel.fileno
+            return -1
 
         def recv(self):
             while self.nonblocking_recv():
@@ -202,6 +204,12 @@ class SSH(object):
                 self.exit_status = self.stdout.channel.recv_exit_status()
             return False
 
+        def close(self):
+            self.stdin.close()
+            self.stdout.close()
+            self.stderr.close()
+            self.ssh.close()
+
     @classmethod
     def _output(cls, host, tag, text):
         lines = text.split('\n')
@@ -217,13 +225,24 @@ class SSH(object):
 
     @classmethod
     def ssh_wait(cls, states, command, status):
+        poll = select.poll()
         while any([h.exit_status is None for h in states]):
+            fd2obj = {}
             for h in states:
                 h.nonblocking_recv()
-            active = [h for h in states if h.exit_status is None]
-            rl, wl, xl = select.select(active, [], [], 1.0)
-            for r in rl:
-                r.recv()
+                if h.exit_status is None and h.fileno >= 0:
+                    poll.register(h.fileno, select.POLLIN | select.POLLHUP | select.POLLERR)
+                    fd2obj[h.fileno] = h
+                if h.exit_status is not None:
+                    try:
+                        poll.unregister(h.fileno)
+                    except KeyError:
+                        pass
+                    except ValueError:
+                        pass
+            for fd, event in poll.poll(1.0):
+                print(fd, fd2obj)
+                fd2obj[fd].recv()
         for host in states:
             cls._output(host.location, 'stdout', host.out_stdout)
             cls._output(host.location, 'stderr', host.out_stderr)
@@ -231,6 +250,8 @@ class SSH(object):
             if status is not None and host.exit_status != status:
                 raise RuntimeError('Host %s failed to execute %s' %
                                    (host.location, command))
+        for host in states:
+            host.close()
 
     @classmethod
     def scp(cls, host, src, dst):

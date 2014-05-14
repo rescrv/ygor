@@ -47,12 +47,10 @@ struct ygor_data_record
 
 /* data logger */
 struct ygor_data_logger;
-
 struct ygor_data_logger* ygor_data_logger_create(const char* output,
                                                  uint64_t scale_when,
                                                  uint64_t scale_data);
 int ygor_data_logger_flush_and_destroy(struct ygor_data_logger* ydl);
-
 int ygor_data_logger_start(struct ygor_data_logger* ydl, struct ygor_data_record* ydp);
 int ygor_data_logger_finish(struct ygor_data_logger* ydl, struct ygor_data_record* ydp);
 int ygor_data_logger_record(struct ygor_data_logger* ydl, struct ygor_data_record* ydp);
@@ -61,6 +59,8 @@ int ygor_data_logger_record(struct ygor_data_logger* ydl, struct ygor_data_recor
 struct ygor_data_iterator;
 struct ygor_data_iterator* ygor_data_iterator_create(const char* input);
 void ygor_data_iterator_destroy(struct ygor_data_iterator* ydi);
+uint64_t ygor_data_iterator_when_scale(struct ygor_data_iterator* ydi);
+uint64_t ygor_data_iterator_data_scale(struct ygor_data_iterator* ydi);
 
 int ygor_data_iterator_valid(struct ygor_data_iterator* ydi);
 void ygor_data_iterator_advance(struct ygor_data_iterator* ydi);

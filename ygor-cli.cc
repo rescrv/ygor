@@ -44,6 +44,7 @@ main(int argc, const char* argv[])
     cmds.push_back(e::subcommand("run",         "Have Ygor run an experiment"));
     cmds.push_back(e::subcommand("cdf",         "Generate a CDF of the data"));
     cmds.push_back(e::subcommand("dump",        "Dump the raw data"));
+    cmds.push_back(e::subcommand("merge",       "Merge multiple data files"));
     cmds.push_back(e::subcommand("summarize",   "Generate a summary of the data"));
     cmds.push_back(e::subcommand("timeseries",  "Generate a timeseries of the data"));
     cmds.push_back(e::subcommand("t-test",      "Run the Student's t-test on multiple data files"));

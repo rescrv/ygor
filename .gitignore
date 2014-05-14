@@ -13,6 +13,7 @@
 /bin/ygor-armnod
 /bin/ygor-cdf
 /bin/ygor-dump
+/bin/ygor-merge
 /bin/ygor-summarize
 /bin/ygor-timeseries
 /bin/ygor-t-test
@@ -33,6 +34,7 @@
 /Makefile.in
 /missing
 /stamp-h1
-/ygor.pc
 /ygor/collect.c
+/ygor/collect.so
+/ygor.pc
 /ylwrap

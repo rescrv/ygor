@@ -161,4 +161,22 @@ class bucket_scale_opts
         uint64_t m_scale;
 };
 
+inline bool
+compare_by_flags_then_when(const ygor_data_record& lhs,
+                           const ygor_data_record& rhs)
+{
+    if (lhs.flags < rhs.flags)
+    {
+        return true;
+    }
+    else if (lhs.flags == rhs.flags)
+    {
+        return lhs.when < rhs.when;
+    }
+    else
+    {
+        return false;
+    }
+}
+
 #endif // ygor_internal_h_

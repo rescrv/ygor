@@ -304,29 +304,6 @@ ygor_data_logger :: record(ygor_data_record* dr)
     }
 }
 
-namespace
-{
-
-bool
-compare_by_flags_then_when(const ygor_data_record& lhs,
-                           const ygor_data_record& rhs)
-{
-    if (lhs.flags < rhs.flags)
-    {
-        return true;
-    }
-    else if (lhs.flags == rhs.flags)
-    {
-        return lhs.when < rhs.when;
-    }
-    else
-    {
-        return false;
-    }
-}
-
-} // namespace
-
 bool
 ygor_data_logger :: do_write(std::vector<ygor_data_record>* drs)
 {
@@ -402,6 +379,8 @@ class ygor_data_iterator
 
     public:
         int open(const char* input);
+        uint64_t when_scale() { return m_when_scale; }
+        uint64_t data_scale() { return m_data_scale; }
         int valid();
         void advance();
         void read(ygor_data_record* dr);
@@ -796,6 +775,18 @@ ygor_data_iterator_destroy(struct ygor_data_iterator* di)
     {
         delete di;
     }
+}
+
+YGOR_API uint64_t
+ygor_data_iterator_when_scale(struct ygor_data_iterator* ydi)
+{
+    return ydi->when_scale();
+}
+
+YGOR_API uint64_t
+ygor_data_iterator_data_scale(struct ygor_data_iterator* ydi)
+{
+    return ydi->data_scale();
 }
 
 YGOR_API int

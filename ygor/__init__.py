@@ -37,6 +37,7 @@ import errno
 import glob
 import importlib
 import inspect
+import itertools
 import os.path
 import pipes
 import select
@@ -346,29 +347,41 @@ class HostSet(object):
         print('run on', self.name + ':', command)
         SSH.ssh(self.hosts, command, status)
 
+    def deindex(self, i, arg):
+        if isinstance(arg, HostSet.Index):
+            return arg.func(i)
+        return arg
+
     def run_many(self, command, status=0, number=None):
         if number is None:
             number = len(self.hosts)
-        def deindex(i, arg):
-            if isinstance(arg, HostSet.Index):
-                return arg.func(i)
-            return arg
         print('run on', self.name + ':', command)
         states = []
         for idx in range(number):
-            commandp = [deindex(idx, a) for a in command]
+            commandp = [self.deindex(idx, a) for a in command]
             commandp = ' '.join([pipes.quote(str(arg)) for arg in commandp])
             h = self.hosts[idx % len(self.hosts)]
             states.append(SSH.HostState(h[0], h[1], h[2], commandp))
         SSH.ssh_wait(states, command, status)
 
-    def collect(self, save_as, copy_from=None):
-        copy_from = copy_from or save_as
-        print('collect from', self.name + ':', copy_from, '->', save_as)
-        for i, host in enumerate(self.hosts):
-            SSH.scp(host.location,
-                    os.path.join(host.workspace, copy_from),
-                    os.path.join(self.exp.output, save_as + ('[%d]' % i)))
+    def collect(self, output, source, merge=None, number=None):
+        print('collecting from', self.name + ': ->', output)
+        tmp = os.path.join(self.exp.output, '.tmp')
+        if not os.path.exists(tmp):
+            os.mkdir(tmp)
+        if number is None:
+            number = len(self.hosts)
+        dsts = [os.path.join(self.exp.output, output)]
+        for idx in range(number):
+            host = self.hosts[idx % len(self.hosts)]
+            src = os.path.join(host.workspace, self.deindex(idx, source))
+            dst = os.path.join(tmp, '{0}-{1}'.format(idx, output))
+            SSH.scp(host.location, src, dst)
+            dsts.append(dst)
+        if merge is None:
+            merge = ['ygor', 'merge', '--output']
+        subprocess.check_call(merge + dsts)
+        shutil.rmtree(tmp)
 
 
 class Parameter(object):

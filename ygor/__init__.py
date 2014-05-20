@@ -279,6 +279,18 @@ class SSH(object):
 MANDATORY_OPTIONS = ('location', 'workspace')
 
 
+class Raw(object):
+
+    def __init__(self, s):
+        self.s = s
+
+
+def quote(s):
+    if isinstance(s, Raw):
+        return str(s.s)
+    return pipes.quote(str(s))
+
+
 class Host(object):
 
     def __init__(self, name):
@@ -299,7 +311,7 @@ class Host(object):
             self.path = opts['path']
 
     def run(self, command, status=0):
-        command = ' '.join([pipes.quote(str(arg)) for arg in command])
+        command = ' '.join([quote(arg) for arg in command])
         print('run on', self.name + ':', command)
         host = SSH.HostMetaData(location=self.location,
                                 workspace=self.workspace,
@@ -343,7 +355,7 @@ class HostSet(object):
 
 
     def run(self, command, status=0):
-        command = ' '.join([pipes.quote(str(arg)) for arg in command])
+        command = ' '.join([quote(arg) for arg in command])
         print('run on', self.name + ':', command)
         SSH.ssh(self.hosts, command, status)
 
@@ -359,7 +371,7 @@ class HostSet(object):
         states = []
         for idx in range(number):
             commandp = [self.deindex(idx, a) for a in command]
-            commandp = ' '.join([pipes.quote(str(arg)) for arg in commandp])
+            commandp = ' '.join([quote(arg) for arg in commandp])
             h = self.hosts[idx % len(self.hosts)]
             states.append(SSH.HostState(h[0], h[1], h[2], commandp))
         SSH.ssh_wait(states, command, status)

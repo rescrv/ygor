@@ -70,6 +70,15 @@ class Experiment(object):
             params.append(name.lower())
         return sorted(params)
 
+    def get_name_for_param(self, p):
+        for name in dir(self):
+            attr = getattr(self, name)
+            if not isinstance(attr, ygor.Parameter):
+                continue
+            if getattr(self, name) is p:
+                return name
+        return None
+
     def get_hosts(self):
         hosts = []
         for name in dir(self):
@@ -367,7 +376,18 @@ class HostSet(object):
     def run_many(self, command, status=0, number=None):
         if number is None:
             number = len(self.hosts)
-        print('run on', self.name + ':', command)
+        assert self.exp
+        def pretty_filter(x):
+            if isinstance(x, Parameter):
+                name = self.exp.get_name_for_param(x) or '?'
+                return 'Parameter({0}={1})'.format(name.lower(), str(x))
+            elif isinstance(x, HostSet.Index):
+                name = repr(x.func).split()[1]
+                return 'HostSet.Index({0})'.format(name)
+            else:
+                return quote(x)
+        pretty = [pretty_filter(a) for a in command]
+        print('run on', self.name + ':', ' '.join(pretty))
         states = []
         for idx in range(number):
             commandp = [self.deindex(idx, a) for a in command]
@@ -424,9 +444,9 @@ def get_experiment(path):
     mod, cls = path.rsplit('.', 1)
     try:
         return getattr(importlib.import_module(mod), cls)
-    except ImportError:
-        raise RuntimeError('Could not find module %s.\n'
-                           'Make sure it\'s in your Python path.' % mod)
+    except ImportError as e:
+        raise RuntimeError('Could not import module %s.\n'
+                           'Make sure it\'s in your Python path.\nImportError: %s' % (mod, e.message))
     except AttributeError:
         raise RuntimeError('No class %s in module %s.' % (cls, mod))
 

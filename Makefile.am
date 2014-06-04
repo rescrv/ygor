@@ -84,7 +84,7 @@ pkgconfig_DATA = ygor.pc
 lib_LTLIBRARIES = libygor.la
 
 libygor_la_SOURCES = ygor.cc armnod.cc
-libygor_la_LIBADD = $(E_LIBS) -lssl
+libygor_la_LIBADD = $(E_LIBS) -lsodium
 
 pkgpyexecdir = $(pyexecdir)/ygor
 pkgpyexec_DATA = ygor/__init__.py

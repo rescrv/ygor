@@ -27,8 +27,8 @@
 
 #define __STDC_LIMIT_MACROS
 
-// OpenSSL
-#include <openssl/rc4.h>
+// Sodium
+#include <sodium/crypto_stream_salsa208.h>
 
 // STL
 #include <memory>
@@ -130,9 +130,9 @@ struct armnod_generator_variable_length : public armnod_generator
 struct seekable_engine
 {
     typedef uint64_t result_type;
-    seekable_engine(uint64_t bits);
+    seekable_engine(uint64_t width);
     uint64_t min() const { return 0; }
-    uint64_t max() const { return cached_max; }
+    uint64_t max() const { return maxval; }
     uint64_t generate();
     void seek(uint64_t idx);
 
@@ -140,14 +140,13 @@ struct seekable_engine
         seekable_engine(const seekable_engine&);
         seekable_engine& operator = (const seekable_engine&);
         void next();
-        uint64_t bits;
-        uint64_t key_idx;
-        RC4_KEY key;
-        unsigned char buffer[sizeof(uint64_t)];
-        uint64_t number;
-        unsigned iters;
-        uint64_t cached_max;
-        uint64_t cached_iters;
+
+        uint64_t width;
+        uint64_t maxval;
+        uint64_t nonce;
+        unsigned char key[crypto_stream_salsa208_KEYBYTES];
+        unsigned char bytes[64];
+        size_t bytes_idx;
 };
 
 struct seekable_engine_wrapper
@@ -661,57 +660,61 @@ armnod_generator_variable_length :: reset()
 
 //////////////////////////// Fixed-Length Generator ////////////////////////////
 
-seekable_engine :: seekable_engine(uint64_t b)
-    : bits(b)
-    , key_idx()
-    , key()
-    , number(0)
-    , iters(0)
-    , cached_max((1 << bits) - 1)
-    , cached_iters(64 / bits)
+seekable_engine :: seekable_engine(uint64_t w)
+    : width(w)
+    , maxval((1 << (8ULL * width)) - 1)
+    , nonce(0)
+    , bytes_idx(0)
 {
-    seek(key_idx);
+    assert(width > 0);
+    assert(width <= 8);
+    memset(key, 0, sizeof(key));
+    memset(bytes, 0, sizeof(bytes));
+    seek(nonce);
 }
 
 uint64_t
 seekable_engine :: generate()
 {
-    assert(iters > 0);
+    unsigned char buf[sizeof(uint64_t)];
+    memset(buf, 0, sizeof(buf));
 
-    uint64_t x = number & ((1 << bits) - 1);
-    number = number >> bits;
-    --iters;
-
-    if (iters == 0)
+    for (size_t i = 0; i < width; )
     {
-        next();
+        if (bytes_idx == 64)
+        {
+            next();
+            assert(bytes_idx < 64);
+        }
+
+        buf[i] = bytes[bytes_idx];
+        ++i;
+        ++bytes_idx;
     }
 
+    uint64_t x = 0;
+    e::unpack64le(buf, &x);
     return x;
 }
 
 void
 seekable_engine :: seek(uint64_t idx)
 {
-    // set the key
-    unsigned char buf[sizeof(uint64_t) * 2];
-    memset(buf, 0, sizeof(buf));
-    e::pack64be(0xdeadbeefcafebabeULL, buf);
-    e::pack64be(idx, buf + sizeof(uint64_t));
-    RC4_set_key(&key, sizeof(buf), buf);
-    // set the initial state
-    e::pack64be(0x8badf00ddefec8edULL, buffer);
+    nonce = idx;
+    bytes_idx = 64;
     next();
 }
 
 void
 seekable_engine :: next()
 {
-    unsigned char ciphertext[sizeof(uint64_t)];
-    RC4(&key, sizeof(uint64_t), buffer, ciphertext);
-    memmove(buffer, ciphertext, sizeof(uint64_t));
-    e::unpack64be(buffer, &number);
-    iters = cached_iters;
+    assert(bytes_idx == 64);
+    unsigned char noncebuf[sizeof(uint64_t)];
+    e::pack64be(nonce, noncebuf);
+    int rc = crypto_stream_salsa208(bytes, sizeof(bytes), noncebuf, key);
+    assert(rc == 0);
+    bytes_idx = 0;
+    ++nonce;
 }
 
 armnod_generator_fixed :: armnod_generator_fixed(const armnod_config* ac)
@@ -722,19 +725,8 @@ armnod_generator_fixed :: armnod_generator_fixed(const armnod_config* ac)
     , string_chooser(string_chooser_engine, string_chooser_dist)
     , alphabet_engine()
     , alphabet_dist()
-    , alphabet_idx(seekable_engine_wrapper(alphabet_engine.get()), alphabet_dist)
+    , alphabet_idx(seekable_engine_wrapper(NULL), alphabet_dist)
 {
-    size_t alpha_sz = config->alphabet.size();
-    size_t bits = 0;
-
-    while (alpha_sz > 0)
-    {
-        alpha_sz >>= 1;
-        ++bits;
-    }
-
-    alphabet_engine.reset(new seekable_engine(bits));
-    reset();
 }
 
 armnod_generator_fixed :: ~armnod_generator_fixed() throw ()
@@ -776,6 +768,18 @@ armnod_generator_fixed :: generate()
 void
 armnod_generator_fixed :: reset()
 {
+    size_t alpha_sz = config->alphabet.size();
+    size_t width = 0;
+
+    while (alpha_sz > 0)
+    {
+        alpha_sz >>= 8;
+        ++width;
+    }
+
+    width = width > 0 ? width : 1;
+    alphabet_engine.reset(new seekable_engine(width));
+
     assert(config->method == armnod_config::FIXED);
     assert(config->set_size > 0);
     buffer.resize(config->length_max + 1);

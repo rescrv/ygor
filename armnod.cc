@@ -687,9 +687,10 @@ seekable_engine :: generate()
             assert(bytes_idx < 64);
         }
 
-        buf[i] = bytes[bytes_idx];
-        ++i;
-        ++bytes_idx;
+        size_t sz = std::min(64 - bytes_idx, width - i);
+        memmove(buf, bytes, sz);
+        i += sz;
+        bytes_idx += sz;
     }
 
     uint64_t x = 0;

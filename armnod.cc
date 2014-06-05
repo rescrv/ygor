@@ -179,6 +179,7 @@ struct armnod_generator_fixed : public armnod_generator
 
     void reset();
 
+    uint64_t interval;
     std::vector<char> buffer;
     std::tr1::mt19937 string_chooser_engine;
     std::tr1::uniform_int<size_t> string_chooser_dist;
@@ -720,6 +721,7 @@ seekable_engine :: next()
 
 armnod_generator_fixed :: armnod_generator_fixed(const armnod_config* ac)
     : armnod_generator(ac)
+    , interval(UINT64_MAX / ac->set_size)
     , buffer()
     , string_chooser_engine()
     , string_chooser_dist()
@@ -744,6 +746,7 @@ armnod_generator_fixed :: seed(uint64_t s)
 const char*
 armnod_generator_fixed :: generate_idx(uint64_t idx)
 {
+    idx *= interval;
     alphabet_engine->seek(idx);
     assert(buffer.size() > 0);
     size_t length = buffer.size() - 1;
@@ -769,6 +772,7 @@ armnod_generator_fixed :: generate()
 void
 armnod_generator_fixed :: reset()
 {
+    interval = UINT64_MAX / config->set_size;
     size_t alpha_sz = config->alphabet.size();
     size_t width = 0;
 

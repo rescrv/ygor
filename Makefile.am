@@ -83,8 +83,8 @@ pkgconfig_DATA = ygor.pc
 
 lib_LTLIBRARIES = libygor.la
 
-libygor_la_SOURCES = ygor.cc armnod.cc
-libygor_la_LIBADD = $(E_LIBS) -lsodium
+libygor_la_SOURCES = ygor.cc armnod.cc guacamole.cc
+libygor_la_LIBADD = $(E_LIBS)
 
 pkgpyexecdir = $(pyexecdir)/ygor
 pkgpyexec_DATA = ygor/__init__.py
@@ -108,3 +108,14 @@ pyx_verbose_ = $(pyx_verbose_$(AM_DEFAULT_VERBOSITY))
 pyx_verbose_0 = @echo "  PYX   " $@;
 ygor/collect.c: ygor/collect.pyx
 	$(pyx_verbose)cython ygor/collect.pyx
+
+TESTS  =
+TESTS += test-salsa208-guacamole
+
+check_PROGRAMS = test-salsa208-guacamole
+
+test_salsa208_guacamole_SOURCES = test-salsa208-guacamole.cc guacamole.cc
+test_salsa208_guacamole_CPPFLAGS =
+test_salsa208_guacamole_CPPFLAGS += $(AM_CPPFLAGS)
+test_salsa208_guacamole_CPPFLAGS += $(CPPFLAGS)
+test_salsa208_guacamole_LDADD = -lsodium

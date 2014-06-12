@@ -102,7 +102,8 @@ guacamole_prng :: generate(unsigned bits)
 
     if (m_next_bits < bits)
     {
-        m_next |= (m_buffer[m_buffer_idx] << m_next_bits);
+        uint64_t x = m_buffer[m_buffer_idx];
+        m_next |= x << m_next_bits;
         m_next_bits += 32;
         ++m_buffer_idx;
     }
@@ -214,11 +215,8 @@ struct armnod_generator
         const std::auto_ptr<guacamole_prng> m_guacamole;
         const std::auto_ptr<string_chooser> m_strings;
         const std::auto_ptr<length_chooser> m_lengths;
-        char* const m_alphabet;
-        unsigned m_alphabet_sz;
         char* m_buffer;
-        uint32_t* m_scratch;
-        unsigned m_alpha_bits;
+        char m_alphabet[1U << 8] __attribute__ ((aligned (64)));
 
         armnod_generator(const armnod_generator&);
         armnod_generator& operator = (const armnod_generator&);
@@ -678,17 +676,18 @@ armnod_generator :: armnod_generator(const armnod_config* config)
     : m_guacamole(new guacamole_prng())
     , m_strings(string_chooser::create(config))
     , m_lengths(length_chooser::create(config))
-    , m_alphabet(new char[config->alphabet.size() + 1])
-    , m_alphabet_sz(config->alphabet.size())
     , m_buffer(new char[m_lengths->max() + LENGTH_ROUNDUP])
-    , m_scratch(new uint32_t[m_lengths->max() + LENGTH_ROUNDUP])
-    , m_alpha_bits(random_bits_for(m_alphabet_sz))
 {
-    memmove(m_alphabet, config->alphabet.c_str(), config->alphabet.size() + 1);
-    const size_t sz = m_lengths->max() + LENGTH_ROUNDUP;
-    memset(m_buffer, 0, sz * sizeof(char));
-    memset(m_scratch, 0, sz * sizeof(uint32_t));
-    assert(m_alpha_bits <= 8);
+    assert(config->alphabet.size() < 256);
+
+    for (uint64_t i = 0; i < 256; ++i)
+    {
+        double d = i / 256. * config->alphabet.size();
+        assert(unsigned(d) < config->alphabet.size());
+        m_alphabet[i] = config->alphabet[unsigned(d)];
+    }
+
+    memset(m_buffer, 0, (m_lengths->max() + LENGTH_ROUNDUP) * sizeof(char));
 }
 
 armnod_generator :: ~armnod_generator() throw ()
@@ -696,11 +695,6 @@ armnod_generator :: ~armnod_generator() throw ()
     if (m_buffer)
     {
         delete[] m_buffer;
-    }
-
-    if (m_scratch)
-    {
-        delete[] m_scratch;
     }
 }
 
@@ -733,27 +727,17 @@ armnod_generator :: generate_from_current_position()
     assert(length <= m_lengths->max());
     assert(length <= m_lengths->max());
 
-    for (uint64_t i = 0; i < length; ++i)
-    {
-        m_scratch[i] = m_guacamole->generate(m_alpha_bits);
-    }
-
-    uint16_t x0;
-    uint16_t x1;
-    uint16_t x2;
-    uint16_t x3;
-
     for (uint64_t i = 0; i < rounded; i += LENGTH_ROUNDUP)
     {
-        x0 = m_scratch[i + 0] * m_alphabet_sz;
-        x1 = m_scratch[i + 1] * m_alphabet_sz;
-        x2 = m_scratch[i + 2] * m_alphabet_sz;
-        x3 = m_scratch[i + 3] * m_alphabet_sz;
-
-        m_buffer[i + 0] = m_alphabet[x0 >> m_alpha_bits];
-        m_buffer[i + 1] = m_alphabet[x1 >> m_alpha_bits];
-        m_buffer[i + 2] = m_alphabet[x2 >> m_alpha_bits];
-        m_buffer[i + 3] = m_alphabet[x3 >> m_alpha_bits];
+        uint32_t x = m_guacamole->generate(32);
+        uint32_t a0 = (x) & 255;
+        uint32_t a1 = (x >> 8) & 255;
+        uint32_t a2 = (x >> 16) & 255;
+        uint32_t a3 = (x >> 24) & 255;
+        m_buffer[i + 0] = m_alphabet[a0];
+        m_buffer[i + 1] = m_alphabet[a1];
+        m_buffer[i + 2] = m_alphabet[a2];
+        m_buffer[i + 3] = m_alphabet[a3];
     }
 
     m_buffer[length] = '\0';

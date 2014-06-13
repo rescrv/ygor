@@ -40,44 +40,20 @@
 int
 main(int argc, const char* argv[])
 {
-    const char* method = "normal";
-    bool set_size_trip = false;
-    long set_size = 1024;
-
-    e::argparser apg;
+    e::argparser ap;
     std::auto_ptr<armnod_argparser> apl(armnod_argparser::create(""));
-    apg.autohelp();
-    apg.arg().long_name("method")
-             .description("method to use for generating strings (default: normal)")
-             .metavar("METHOD")
-             .as_string(&method);
-    apg.arg().long_name("set-size")
-             .description("number of strings to generate when using --method=fixed")
-             .metavar("NUM")
-             .as_long(&set_size).set_true(&set_size_trip);
-    apg.add("Generator:", apl->parser());
+    ap.autohelp();
+    ap.add("Generator:", apl->parser());
 
-    if (!apg.parse(argc, argv))
+    if (!ap.parse(argc, argv))
     {
         return EXIT_FAILURE;
     }
 
-    if (apg.args_sz() > 0)
+    if (ap.args_sz() > 0)
     {
-        apg.usage();
+        ap.usage();
         std::cerr << "\nerror:  command takes no positional arguments" << std::endl;
-        return EXIT_FAILURE;
-    }
-
-    if (armnod_config_method(apl->config(), method) < 0)
-    {
-        std::cerr << "error:  could not set config method" << std::endl;
-        return EXIT_FAILURE;
-    }
-
-    if (set_size_trip && armnod_config_set_size(apl->config(), set_size) < 0)
-    {
-        std::cerr << "error:  could not set size" << std::endl;
         return EXIT_FAILURE;
     }
 

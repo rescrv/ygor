@@ -120,15 +120,7 @@ int ygor_t_test(struct ygor_summary* baseline,
 struct armnod_config;
 struct armnod_config* armnod_config_create();
 void armnod_config_destroy(struct armnod_config* ac);
-/* How should random strings be generated?
- * default: normal
- * normal:  length of the string is a normal distribution between length_min and
- *          length_max, with characters chosen independently from alphabet.
- * uniform: length of the string is a uniformly distributed between length_min
- *          and length_max, with characters chosen independently from alphabet.
- * fixed:   strings are fixed-length, chosen from a set of set-size strings.
- */
-int armnod_config_method(struct armnod_config* ac, const char* _method);
+
 /* A c-string containing the alphabet of the random string.
  * Repeated characters will bias the results accordingly.
  */
@@ -144,22 +136,44 @@ int armnod_config_alphabet(struct armnod_config* ac, const char* chars);
  * hex:     [0-9a-f]
  */
 int armnod_config_charset(struct armnod_config* ac, const char* name);
-/* Set the length of the generated keys */
-int armnod_config_length(struct armnod_config* ac, size_t len);
-/* Set the minimum length of the generated keys */
-int armnod_config_length_min(struct armnod_config* ac, size_t len);
-/* Set the maximum length of the generated keys */
-int armnod_config_length_max(struct armnod_config* ac, size_t len);
-/* Set the number of possible strings that will be generated
- * Only has effect when method=fixed
+
+/* Generate random strings that are unlikely to repeat.
+ * This is the default behavior.
  */
-int armnod_config_set_size(struct armnod_config* ac, size_t size);
+int armnod_config_choose_default(struct armnod_config* ac);
+/* Generate random strings from a fixed size set.
+ * The strings will be selected from the fixed-size set uniformly at random, and
+ * will repeat indefinitely.
+ */
+int armnod_config_choose_fixed(struct armnod_config* ac, uint64_t size);
+/* Generate random strings from a fixed size set.
+ * Each string in the set will be generated exactly once.
+ */
+int armnod_config_choose_fixed_once(struct armnod_config* ac, uint64_t size);
+
+/* Generate strings of a constant length */
+int armnod_config_length_constant(struct armnod_config* ac, uint64_t length);
+/* Generate strings of length uniformly distributed between min, max */
+int armnod_config_length_uniform(struct armnod_config* ac,
+                                 uint64_t min, uint64_t max);
 
 struct armnod_generator;
 struct armnod_generator* armnod_generator_create(const struct armnod_config* ac);
 void armnod_generator_destroy(struct armnod_generator* ag);
-const char* armnod_generate_idx(struct armnod_generator* ag, uint64_t idx);
+
+/* Generate a random string using the provided generator.
+ * The string will be constructed according to the generator's configuration and
+ * the next string in the sequence will be returned.  The returned string points
+ * to internal storage and should not be modified or freed.
+ *
+ * If the generator returns NULL, it means that there are no more strings to
+ * return.
+ */
 const char* armnod_generate(struct armnod_generator* ag);
+/* Same as "armnod_generate", but returns the size of the string to avoid a
+ * subsequent call to "strlen".
+ */
+const char* armnod_generate_sz(struct armnod_generator* ag, uint64_t* sz);
 
 #ifdef __cplusplus
 } /* extern "C" */

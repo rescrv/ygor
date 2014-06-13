@@ -133,48 +133,60 @@ guacamole_prng :: mash()
     ++m_nonce;
 }
 
-/////////////////////////////// Internal Classes ///////////////////////////////
+/////////////////////////////////// Utilities //////////////////////////////////
 
-enum distribution_t
+namespace
 {
-    DIST_NORMAL,
-    DIST_UNIFORM,
-    DIST_FIXED
-};
 
-struct armnod_config
+double
+mean(uint64_t _min, uint64_t _max)
 {
-    armnod_config();
-
-    distribution_t method;
-    std::string alphabet;
-    size_t length_min;
-    size_t length_max;
-    size_t fixed_set_size;
-
-    private:
-        armnod_config(const armnod_config&);
-        armnod_config& operator = (const armnod_config&);
-};
-
-armnod_config :: armnod_config()
-    : method(DIST_NORMAL)
-    , alphabet(alphabet_default)
-    , length_min(DEFAULT_LENGTH)
-    , length_max(DEFAULT_LENGTH)
-    , fixed_set_size(DEFAULT_SET_SIZE)
-{
+    double min = static_cast<double>(_min);
+    double max = static_cast<double>(_max);
+    return min + (max - min) / 2;
 }
 
-// The string chooser selects the position for the prng before generating each
-// string.  It will likely have its own prng.
+double
+sigma(uint64_t _min, uint64_t _max)
+{
+    double min = static_cast<double>(_min);
+    double max = static_cast<double>(_max);
+    return (max - min) / 6;
+}
+
+unsigned
+random_bits_for(uint64_t range)
+{
+    unsigned bits = 0;
+
+    while (1U << bits < range)
+    {
+        ++bits;
+    }
+
+    return bits;
+}
+
+double
+scale_random_bits(unsigned bits, unsigned range)
+{
+    double scale = range;
+    scale = scale / (1ULL << bits);
+    return scale;
+}
+
+} // namespace
+
+//////////////////////////////// String Choosers ///////////////////////////////
+
 struct string_chooser
 {
-    static string_chooser* create(const armnod_config*);
+    string_chooser() {}
+    virtual ~string_chooser() throw () {}
 
-    string_chooser();
-    virtual ~string_chooser() throw ();
-
+    virtual string_chooser* copy() = 0;
+    virtual bool done() = 0;
+    virtual bool has_index() = 0;
     virtual uint64_t index() = 0;
 
     private:
@@ -182,17 +194,78 @@ struct string_chooser
         string_chooser& operator = (const string_chooser&);
 };
 
-// The length chooser returns the length of the string deterministically from
-// the provided prng.  A length chooser constructed with the same arguments, and
-// provided a prng at the same position in the stream, should return the same
-// length.
+struct string_chooser_arbitrary : public string_chooser
+{
+    string_chooser_arbitrary() {}
+    virtual ~string_chooser_arbitrary() throw () {}
+
+    virtual string_chooser* copy() { return new string_chooser_arbitrary(); }
+    virtual bool done() { return false; }
+    virtual bool has_index() { return false; }
+    virtual uint64_t index() { return 0; }
+
+    private:
+        string_chooser_arbitrary(const string_chooser_arbitrary&);
+        string_chooser_arbitrary& operator = (const string_chooser_arbitrary&);
+};
+
+struct string_chooser_fixed : public string_chooser
+{
+    string_chooser_fixed(uint64_t size)
+        : m_guacamole(new guacamole_prng())
+        , m_set_size(size)
+        , m_bits(random_bits_for(size))
+        , m_scale(scale_random_bits(m_bits, size))
+    {
+    }
+    virtual ~string_chooser_fixed() throw () {}
+
+    virtual string_chooser* copy() { return new string_chooser_fixed(m_set_size); }
+    virtual bool done() { return false; }
+    virtual bool has_index() { return true; }
+    virtual uint64_t index()
+    {
+        uint64_t x = m_guacamole->generate(m_bits) * m_scale;
+        assert(x < m_set_size);
+        return x;
+    }
+
+    private:
+        const std::auto_ptr<guacamole_prng> m_guacamole;
+        uint64_t m_set_size;
+        unsigned m_bits;
+        double m_scale;
+
+        string_chooser_fixed(const string_chooser_fixed&);
+        string_chooser_fixed& operator = (const string_chooser_fixed&);
+};
+
+struct string_chooser_fixed_once : public string_chooser
+{
+    string_chooser_fixed_once(uint64_t size) : m_set_size(size), m_idx(0) {}
+    virtual ~string_chooser_fixed_once() throw () {}
+
+    virtual string_chooser* copy() { return new string_chooser_fixed_once(m_set_size); }
+    virtual bool done() { return m_idx >= m_set_size; }
+    virtual bool has_index() { return true; }
+    virtual uint64_t index() { return m_idx++; }
+
+    private:
+        uint64_t m_set_size;
+        uint64_t m_idx;
+
+        string_chooser_fixed_once(const string_chooser_fixed_once&);
+        string_chooser_fixed_once& operator = (const string_chooser_fixed_once&);
+};
+
+//////////////////////////////// Length Choosers ///////////////////////////////
+
 struct length_chooser
 {
-    static length_chooser* create(const armnod_config*);
+    length_chooser() {}
+    virtual ~length_chooser() throw () {}
 
-    length_chooser();
-    virtual ~length_chooser() throw ();
-
+    virtual length_chooser* copy() = 0;
     virtual uint64_t max() = 0;
     virtual uint64_t length(guacamole_prng* gp) = 0;
 
@@ -201,17 +274,85 @@ struct length_chooser
         length_chooser& operator = (const length_chooser&);
 };
 
+struct length_chooser_constant : public length_chooser
+{
+    length_chooser_constant(uint64_t sz) : m_sz(sz) {}
+    virtual ~length_chooser_constant() throw () {}
+
+    virtual length_chooser* copy() { return new length_chooser_constant(m_sz); }
+    virtual uint64_t max() { return m_sz; }
+    virtual uint64_t length(guacamole_prng*) { return m_sz; }
+
+    private:
+        uint64_t m_sz;
+
+        length_chooser_constant(const length_chooser_constant&);
+        length_chooser_constant& operator = (const length_chooser_constant&);
+};
+
+struct length_chooser_uniform : public length_chooser
+{
+    length_chooser_uniform(unsigned _min, unsigned _max)
+        : m_min(_min)
+        , m_max(_max)
+        , m_bits(random_bits_for(_max))
+        , m_scale(scale_random_bits(m_bits, _max))
+    {
+        assert(m_min <= m_max);
+    }
+    virtual ~length_chooser_uniform() throw () {}
+
+    virtual length_chooser* copy() { return new length_chooser_uniform(m_min, m_max); }
+    virtual uint64_t max() { return m_max; }
+    virtual uint64_t length(guacamole_prng* gp)
+    {
+        uint64_t ret = gp->generate(m_bits) * m_scale;
+        if (ret < m_min) { ret = m_min; }
+        if (ret > m_max) { ret = m_max; }
+        return ret;
+    }
+
+    private:
+        unsigned m_min;
+        unsigned m_max;
+        unsigned m_bits;
+        double m_scale;
+
+        length_chooser_uniform(const length_chooser_uniform&);
+        length_chooser_uniform& operator = (const length_chooser_uniform&);
+};
+
+///////////////////////// Config and Generator Classes /////////////////////////
+
+struct armnod_config
+{
+    armnod_config();
+    ~armnod_config() throw () {}
+
+    std::string alphabet;
+    std::auto_ptr<string_chooser> strings;
+    std::auto_ptr<length_chooser> lengths;
+
+    private:
+        armnod_config(const armnod_config&);
+        armnod_config& operator = (const armnod_config&);
+};
+
+armnod_config :: armnod_config()
+    : alphabet(alphabet_default)
+    , strings(new string_chooser_arbitrary())
+    , lengths(new length_chooser_constant(8))
+{
+}
+
 struct armnod_generator
 {
     armnod_generator(const armnod_config* config);
     ~armnod_generator() throw ();
 
-    const char* generate_idx(uint64_t idx);
-    const char* generate();
+    const char* generate(uint64_t* sz);
 
     private:
-        const char* generate_from_current_position();
-
         const std::auto_ptr<guacamole_prng> m_guacamole;
         const std::auto_ptr<string_chooser> m_strings;
         const std::auto_ptr<length_chooser> m_lengths;
@@ -236,41 +377,21 @@ armnod_config_create()
 YGOR_API void
 armnod_config_destroy(armnod_config* ac)
 {
-    if (ac)
-    {
-        delete ac;
-    }
+    assert(ac);
+    delete ac;
 }
 
 YGOR_API int
-armnod_config_method(struct armnod_config* ac, const char* _method)
+armnod_config_alphabet(struct armnod_config* ac, const char* _chars)
 {
-    std::string method(_method);
+    std::string chars(_chars);
 
-    if (method == "normal")
-    {
-        ac->method = DIST_NORMAL;
-    }
-    else if (method == "uniform")
-    {
-        ac->method = DIST_UNIFORM;
-    }
-    else if (method == "fixed")
-    {
-        ac->method = DIST_FIXED;
-    }
-    else
+    if (chars.size() >= 256)
     {
         return -1;
     }
 
-    return 0;
-}
-
-YGOR_API int
-armnod_config_alphabet(struct armnod_config* ac, const char* chars)
-{
-    ac->alphabet = std::string(chars);
+    ac->alphabet = chars;
     return 0;
 }
 
@@ -320,33 +441,43 @@ armnod_config_charset(struct armnod_config* ac, const char* _name)
 }
 
 YGOR_API int
-armnod_config_length(struct armnod_config* ac, size_t len)
+armnod_config_choose_default(struct armnod_config* ac)
 {
-    ac->length_min = len;
-    ac->length_max = len;
+    assert(ac);
+    ac->strings.reset(new string_chooser_arbitrary());
     return 0;
 }
 
 YGOR_API int
-armnod_config_length_min(struct armnod_config* ac, size_t len)
+armnod_config_choose_fixed(struct armnod_config* ac, uint64_t size)
 {
-    ac->length_min = len;
-    ac->length_max = std::max(ac->length_max, ac->length_min);
+    assert(ac);
+    ac->strings.reset(new string_chooser_fixed(size));
     return 0;
 }
 
 YGOR_API int
-armnod_config_length_max(struct armnod_config* ac, size_t len)
+armnod_config_choose_fixed_once(struct armnod_config* ac, uint64_t size)
 {
-    ac->length_max = len;
-    ac->length_min = std::min(ac->length_max, ac->length_min);
+    assert(ac);
+    ac->strings.reset(new string_chooser_fixed_once(size));
     return 0;
 }
 
 YGOR_API int
-armnod_config_set_size(struct armnod_config* ac, size_t size)
+armnod_config_length_constant(struct armnod_config* ac, uint64_t length)
 {
-    ac->fixed_set_size = size;
+    assert(ac);
+    ac->lengths.reset(new length_chooser_constant(length));
+    return 0;
+}
+
+YGOR_API int
+armnod_config_length_uniform(struct armnod_config* ac,
+                             uint64_t min, uint64_t max)
+{
+    assert(ac);
+    ac->lengths.reset(new length_chooser_uniform(min, max));
     return 0;
 }
 
@@ -359,22 +490,21 @@ armnod_generator_create(const struct armnod_config* ac)
 YGOR_API void
 armnod_generator_destroy(struct armnod_generator* ag)
 {
-    if (ag)
-    {
-        delete ag;
-    }
-}
-
-YGOR_API const char*
-armnod_generate_idx(struct armnod_generator* ag, uint64_t idx)
-{
-    return ag->generate_idx(idx);
+    assert(ag);
+    delete ag;
 }
 
 YGOR_API const char*
 armnod_generate(struct armnod_generator* ag)
 {
-    return ag->generate();
+    uint64_t sz;
+    return ag->generate(&sz);
+}
+
+YGOR_API const char*
+armnod_generate_sz(struct armnod_generator* ag, uint64_t* sz)
+{
+    return ag->generate(sz);
 }
 
 } // extern "C"
@@ -390,14 +520,15 @@ struct armnod_argparser_impl : public armnod_argparser
 
     e::argparser ap;
     armnod_config configuration;
-    const char* alphabet_value;
-    const char* charset_value;
-    bool length_value_trip;
-    long length_value;
-    bool length_min_value_trip;
-    long length_min_value;
-    bool length_max_value_trip;
-    long length_max_value;
+
+    const char* alphabet;
+    const char* charset;
+    const char* strings;
+    long strings_fixed;
+    const char* lengths;
+    long lengths_const;
+    long lengths_min;
+    long lengths_max;
 
     private:
         armnod_argparser_impl(const armnod_argparser_impl&);
@@ -417,254 +548,99 @@ armnod_argparser :: ~armnod_argparser() throw ()
 armnod_argparser_impl :: armnod_argparser_impl(const char* _prefix)
     : ap()
     , configuration()
-    , alphabet_value(NULL)
-    , charset_value(NULL)
-    , length_value_trip(false)
-    , length_value(DEFAULT_LENGTH)
-    , length_min_value_trip(false)
-    , length_min_value(DEFAULT_LENGTH)
-    , length_max_value_trip(false)
-    , length_max_value(DEFAULT_LENGTH)
+    , alphabet(NULL)
+    , charset(NULL)
+    , strings("default")
+    , strings_fixed(1024)
+    , lengths("constant")
+    , lengths_const(DEFAULT_LENGTH)
+    , lengths_min(DEFAULT_LENGTH)
+    , lengths_max(DEFAULT_LENGTH)
 {
     std::string prefix(_prefix);
     ap.arg().long_name((prefix + "alphabet").c_str())
             .description("alphabet to use for generated strings")
             .metavar("CHARS")
-            .as_string(&alphabet_value);
+            .as_string(&alphabet);
     ap.arg().long_name((prefix + "charset").c_str())
             .description("charset to use for generated strings")
             .metavar("NAME")
-            .as_string(&charset_value);
-    ap.arg().long_name((prefix + "length").c_str())
-            .description("length of generated strings")
+            .as_string(&charset);
+    ap.arg().long_name((prefix + "strings").c_str())
+            .description("method to use to generate strings (e.g. \"default\", \"fixed\", etc.)")
+            .metavar("METHOD")
+            .as_string(&strings);
+    ap.arg().long_name((prefix + "fixed-size").c_str())
+            .description("cardinality of the set of strings that are generated (for methods that support it")
             .metavar("NUM")
-            .as_long(&length_value).set_true(&length_value_trip);
+            .as_long(&strings_fixed);
+    ap.arg().long_name((prefix + "lengths").c_str())
+            .description("method to use to select string length (e.g. \"constant\", \"uniform\", etc.)")
+            .metavar("METHOD")
+            .as_string(&lengths);
+    ap.arg().long_name((prefix + "length").c_str())
+            .description("length of the generated strings")
+            .metavar("NUM")
+            .as_long(&lengths_const);
     ap.arg().long_name((prefix + "length-min").c_str())
             .description("minimum length of generated strings")
             .metavar("NUM")
-            .as_long(&length_min_value).set_true(&length_min_value_trip);
+            .as_long(&lengths_min);
     ap.arg().long_name((prefix + "length-max").c_str())
             .description("maximum length of generated strings")
             .metavar("NUM")
-            .as_long(&length_max_value).set_true(&length_max_value_trip);
+            .as_long(&lengths_max);
 }
+
+#define FAIL_IF_NEGATIVE(X) do { if ((X) < 0) return NULL; } while (0)
 
 armnod_config*
 armnod_argparser_impl :: config()
 {
-    length_min_value = std::max(static_cast<long int>(0), length_min_value);
-    length_max_value = std::max(length_min_value, length_max_value);
-
-    if (alphabet_value)
+    if (alphabet)
     {
-        armnod_config_alphabet(&configuration, alphabet_value);
+        FAIL_IF_NEGATIVE(armnod_config_alphabet(&configuration, alphabet));
     }
 
-    if (charset_value)
+    if (charset)
     {
-        armnod_config_charset(&configuration, charset_value);
+        FAIL_IF_NEGATIVE(armnod_config_charset(&configuration, charset));
     }
 
-    if (length_value_trip)
+    std::string strings_method(strings);
+
+    if (strings_method == "default")
     {
-        armnod_config_length(&configuration, length_value);
+        FAIL_IF_NEGATIVE(armnod_config_choose_default(&configuration));
+    }
+    else if (strings_method == "fixed")
+    {
+        FAIL_IF_NEGATIVE(armnod_config_choose_fixed(&configuration, strings_fixed));
+    }
+    else if (strings_method == "fixed-once")
+    {
+        FAIL_IF_NEGATIVE(armnod_config_choose_fixed_once(&configuration, strings_fixed));
     }
     else
     {
-        if (length_min_value_trip)
-        {
-            armnod_config_length_min(&configuration, length_min_value);
-        }
+        return NULL;
+    }
 
-        if (length_max_value_trip)
-        {
-            armnod_config_length_max(&configuration, length_max_value);
-        }
+    std::string lengths_method(lengths);
+    lengths_const = std::max(0L, lengths_const);
+    lengths_min = std::max(0L, lengths_min);
+    lengths_max = std::max(lengths_min, lengths_max);
+
+    if (lengths_method == "constant")
+    {
+        FAIL_IF_NEGATIVE(armnod_config_length_constant(&configuration, lengths_const));
+    }
+    else if (lengths_method == "uniform")
+    {
+        FAIL_IF_NEGATIVE(armnod_config_length_uniform(&configuration, lengths_min, lengths_max));
     }
 
     return &configuration;
-}
-
-/////////////////////////////////// Utilities //////////////////////////////////
-
-namespace
-{
-
-double
-mean(uint64_t _min, uint64_t _max)
-{
-    double min = static_cast<double>(_min);
-    double max = static_cast<double>(_max);
-    return min + (max - min) / 2;
-}
-
-double
-sigma(uint64_t _min, uint64_t _max)
-{
-    double min = static_cast<double>(_min);
-    double max = static_cast<double>(_max);
-    return (max - min) / 6;
-}
-
-unsigned
-random_bits_for(uint64_t range)
-{
-    unsigned bits = 0;
-
-    while (1 << bits < range)
-    {
-        ++bits;
-    }
-
-    return bits;
-}
-
-double
-scale_random_bits(unsigned bits, unsigned range)
-{
-    double scale = range;
-    scale = scale / (1ULL << bits);
-    return scale;
-}
-
-} // namespace
-
-//////////////////////////////// String Choosers ///////////////////////////////
-
-string_chooser :: string_chooser()
-{
-}
-
-string_chooser :: ~string_chooser() throw ()
-{
-}
-
-struct string_chooser_arbitrary : public string_chooser
-{
-    string_chooser_arbitrary() {}
-    virtual ~string_chooser_arbitrary() throw () {}
-
-    virtual uint64_t index() { return UINT64_MAX; }
-};
-
-string_chooser*
-string_chooser::create(armnod_config const*)
-{
-    return new string_chooser_arbitrary();
-}
-
-//////////////////////////////// Length Choosers ///////////////////////////////
-
-length_chooser :: length_chooser()
-{
-}
-
-length_chooser :: ~length_chooser() throw ()
-{
-}
-
-struct length_chooser_constant : public length_chooser
-{
-    length_chooser_constant(uint64_t sz) : m_sz(sz) {}
-    virtual ~length_chooser_constant() throw ()
-    {
-    }
-
-    virtual uint64_t max() { return m_sz; }
-    virtual uint64_t length(guacamole_prng* gp) { return m_sz; }
-
-    private:
-        uint64_t m_sz;
-};
-
-struct length_chooser_uniform : public length_chooser
-{
-    length_chooser_uniform(unsigned _min, unsigned _max)
-        : m_min(_min)
-        , m_max(_max)
-        , m_bits(random_bits_for(_max))
-        , m_scale(scale_random_bits(m_bits, _max))
-    {
-        assert(m_min <= m_max);
-    }
-    virtual ~length_chooser_uniform() throw ()
-    {
-    }
-
-    virtual uint64_t max() { return m_max; }
-    virtual uint64_t length(guacamole_prng* gp)
-    {
-        uint64_t ret = gp->generate(m_bits) * m_scale;
-        if (ret < m_min) { ret = m_min; }
-        if (ret > m_max) { ret = m_max; }
-        return ret;
-    }
-
-    private:
-        unsigned m_min;
-        unsigned m_max;
-        unsigned m_bits;
-        double m_scale;
-};
-
-struct length_chooser_normal : public length_chooser
-{
-    length_chooser_normal(unsigned min, unsigned max)
-        : m_min(min)
-        , m_max(max)
-    {
-        assert(m_min <= m_max);
-    }
-    virtual ~length_chooser_normal() throw ()
-    {
-    }
-
-    virtual uint64_t length(guacamole_prng* gp);
-
-    private:
-        unsigned m_min;
-        unsigned m_max;
-};
-
-#if 0
-struct length_generator_normal : public length_generator
-{
-    length_generator_normal(std::tr1::mt19937* eng, size_t min, size_t max);
-    virtual ~length_generator_normal() throw ();
-    virtual size_t generate();
-
-    private:
-        length_generator_normal(const length_generator_normal&);
-        length_generator_normal& operator = (const length_generator_normal&);
-        std::tr1::normal_distribution<double> m_dist;
-        std::tr1::variate_generator<std::tr1::mt19937, std::tr1::normal_distribution<double> > m_gen;
-        size_t m_min;
-        size_t m_max;
-};
-
-length_generator_normal :: length_generator_normal(std::tr1::mt19937* eng, size_t min, size_t max)
-    : length_generator()
-    , m_dist(mean(min, max), sigma(min, max))
-    , m_gen(*eng, m_dist)
-    , m_min(min)
-    , m_max(max)
-{
-}
-
-size_t
-length_generator_normal :: generate()
-{
-    size_t x = static_cast<size_t>(m_gen());
-    if (x < m_min) { x = m_min; }
-    if (x > m_max) { x = m_max; }
-    return x;
-}
-#endif
-
-length_chooser*
-length_chooser::create(armnod_config const*)
-{
-    return new length_chooser_constant(16);
 }
 
 /////////////////////////// Generator Implementation ///////////////////////////
@@ -674,8 +650,8 @@ length_chooser::create(armnod_config const*)
 
 armnod_generator :: armnod_generator(const armnod_config* config)
     : m_guacamole(new guacamole_prng())
-    , m_strings(string_chooser::create(config))
-    , m_lengths(length_chooser::create(config))
+    , m_strings(config->strings->copy())
+    , m_lengths(config->lengths->copy())
     , m_buffer(new char[m_lengths->max() + LENGTH_ROUNDUP])
 {
     assert(config->alphabet.size() < 256);
@@ -698,29 +674,21 @@ armnod_generator :: ~armnod_generator() throw ()
     }
 }
 
-const char *
-armnod_generator :: generate_idx(uint64_t idx)
-{
-    m_guacamole->seek(idx);
-    return generate_from_current_position();
-}
+#pragma GCC diagnostic ignored "-Wunsafe-loop-optimizations"
 
 const char*
-armnod_generator :: generate()
+armnod_generator :: generate(uint64_t* sz)
 {
-    uint64_t idx = m_strings->index();
-
-    if (idx != UINT64_MAX)
+    if (m_strings->done())
     {
-        m_guacamole->seek(idx);
+        return NULL;
     }
 
-    return generate_from_current_position();
-}
+    if (m_strings->has_index())
+    {
+        m_guacamole->seek(m_strings->index());
+    }
 
-const char*
-armnod_generator :: generate_from_current_position()
-{
     uint64_t length = m_lengths->length(m_guacamole.get());
     uint64_t rounded = (length + LENGTH_MASK) & ~LENGTH_MASK;
     assert(length <= rounded && length + LENGTH_ROUNDUP > rounded);
@@ -741,5 +709,6 @@ armnod_generator :: generate_from_current_position()
     }
 
     m_buffer[length] = '\0';
+    *sz = length;
     return m_buffer;
 }

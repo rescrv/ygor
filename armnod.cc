@@ -272,6 +272,108 @@ struct string_chooser_fixed_once : public string_chooser
         string_chooser_fixed_once& operator = (const string_chooser_fixed_once&);
 };
 
+// The core of string chooser_fixed_zipf reimplements YCSB
+// Source: core/src/main/java/com/yahoo/ycsb/generator/ZipfianGenerator.java
+// Original License:
+//
+// Copyright (c) 2010 Yahoo! Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License"); you
+// may not use this file except in compliance with the License. You
+// may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License. See accompanying
+// LICENSE file.
+//
+// Author:  Robert Escriva
+// Licesne:  Use it under Apache or 3-Clause BSD as advised by your lawyer.
+struct string_chooser_fixed_zipf : public string_chooser
+{
+    string_chooser_fixed_zipf(uint64_t size, double alpha)
+        : m_guacamole(new guacamole_prng())
+        , m_set_size(size)
+        , m_bits(random_bits_for(size))
+        , m_alpha(alpha)
+        , m_theta(1.0 - (1.0 / m_alpha))
+        , m_zetan(zeta(m_set_size, m_theta))
+        , m_eta((1 - pow(2.0 / m_set_size, 1 - m_theta)) / (1 - zeta(2, m_theta) / m_zetan))
+    {
+    }
+    virtual ~string_chooser_fixed_zipf() throw () {}
+
+    virtual string_chooser* copy()
+    { return new string_chooser_fixed_zipf(m_set_size, m_alpha, m_theta, m_zetan, m_eta); }
+    virtual void seed(uint64_t s) { m_guacamole->seek(s); }
+    virtual bool done() { return false; }
+    virtual bool has_index() { return true; }
+    virtual uint64_t index()
+    {
+        double u = m_guacamole->generate(m_bits);
+        u = u / (1U << m_bits);
+        assert(u >= 0.0 && u < 1);
+        double uz = u * m_zetan;
+
+        if (uz < 1.0)
+        {
+            return 0;
+        }
+
+        if (uz < 1.0 + pow(0.5, m_theta))
+        {
+            return 1;
+        }
+
+        uint64_t idx = m_set_size * pow(m_eta * u - m_eta + 1, m_alpha);
+        assert(idx < m_set_size);
+        return idx;
+    }
+    virtual uint64_t index(uint64_t idx)
+    {
+        return idx;
+    }
+
+    private:
+        static double zeta(uint64_t n, double theta)
+        {
+            double sum = 0;
+
+            for (uint64_t i = 0; i < n; ++i)
+            {
+                sum += 1. / pow(i + 1, theta);
+            }
+
+            return sum;
+        }
+        string_chooser_fixed_zipf(uint64_t size, double alpha,
+                                  double theta, double zetan, double eta)
+            : m_guacamole(new guacamole_prng())
+            , m_set_size(size)
+            , m_bits(random_bits_for(size))
+            , m_alpha(alpha)
+            , m_theta(theta)
+            , m_zetan(zetan)
+            , m_eta(eta)
+        {
+        }
+
+        const std::auto_ptr<guacamole_prng> m_guacamole;
+        const uint64_t m_set_size;
+        const uint64_t m_bits;
+        const double m_alpha;
+        const double m_theta;
+        const double m_zetan;
+        const double m_eta;
+
+        string_chooser_fixed_zipf(const string_chooser_fixed_zipf&);
+        string_chooser_fixed_zipf& operator = (const string_chooser_fixed_zipf&);
+};
+
 //////////////////////////////// Length Choosers ///////////////////////////////
 
 struct length_chooser
@@ -498,6 +600,15 @@ armnod_config_choose_fixed_once(struct armnod_config* ac, uint64_t size)
 }
 
 YGOR_API int
+armnod_config_choose_fixed_zipf(struct armnod_config* ac,
+                                uint64_t size, double alpha)
+{
+    assert(ac);
+    ac->strings.reset(new string_chooser_fixed_zipf(size, alpha));
+    return 0;
+}
+
+YGOR_API int
 armnod_config_length_constant(struct armnod_config* ac, uint64_t length)
 {
     assert(ac);
@@ -579,6 +690,7 @@ struct armnod_argparser_impl : public armnod_argparser
     const char* charset;
     const char* strings;
     long strings_fixed;
+    double strings_alpha;
     const char* lengths;
     long lengths_const;
     long lengths_min;
@@ -606,6 +718,7 @@ armnod_argparser_impl :: armnod_argparser_impl(const char* _prefix, bool method)
     , charset(NULL)
     , strings("default")
     , strings_fixed(1024)
+    , strings_alpha(0.6)
     , lengths("constant")
     , lengths_const(DEFAULT_LENGTH)
     , lengths_min(DEFAULT_LENGTH)
@@ -631,6 +744,10 @@ armnod_argparser_impl :: armnod_argparser_impl(const char* _prefix, bool method)
                 .description("cardinality of the set of strings that are generated (for methods that support it)")
                 .metavar("NUM")
                 .as_long(&strings_fixed);
+        ap.arg().long_name((prefix + "alpha").c_str())
+                .description("the alpha parameter (for Zipf methods)")
+                .metavar("A")
+                .as_double(&strings_alpha);
     }
 
     ap.arg().long_name((prefix + "lengths").c_str())
@@ -679,6 +796,10 @@ armnod_argparser_impl :: config()
     else if (strings_method == "fixed-once")
     {
         FAIL_IF_NEGATIVE(armnod_config_choose_fixed_once(&configuration, strings_fixed));
+    }
+    else if (strings_method == "fixed-zipf")
+    {
+        FAIL_IF_NEGATIVE(armnod_config_choose_fixed_zipf(&configuration, strings_fixed, strings_alpha));
     }
     else
     {

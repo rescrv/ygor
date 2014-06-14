@@ -151,6 +151,12 @@ int armnod_config_choose_fixed(struct armnod_config* ac, uint64_t size);
  * Each string in the set will be generated exactly once.
  */
 int armnod_config_choose_fixed_once(struct armnod_config* ac, uint64_t size);
+/* Generate random strings from a fixed size set.
+ * The strings will be selected from the fixed-size set at random according to a
+ * Zipf distribution with parameter "alpha", and will repeat indefinitely.
+ */
+int armnod_config_choose_fixed_zipf(struct armnod_config* ac,
+                                    uint64_t size, double alpha);
 
 /* Generate strings of a constant length */
 int armnod_config_length_constant(struct armnod_config* ac, uint64_t length);

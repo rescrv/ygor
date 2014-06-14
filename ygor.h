@@ -119,6 +119,7 @@ int ygor_t_test(struct ygor_summary* baseline,
 
 struct armnod_config;
 struct armnod_config* armnod_config_create();
+struct armnod_config* armnod_config_copy(struct armnod_config*);
 void armnod_config_destroy(struct armnod_config* ac);
 
 /* A c-string containing the alphabet of the random string.
@@ -161,6 +162,8 @@ struct armnod_generator;
 struct armnod_generator* armnod_generator_create(const struct armnod_config* ac);
 void armnod_generator_destroy(struct armnod_generator* ag);
 
+/* Seed the random portion used to select strings */
+void armnod_seed(struct armnod_generator* ag, uint64_t seed);
 /* Generate a random string using the provided generator.
  * The string will be constructed according to the generator's configuration and
  * the next string in the sequence will be returned.  The returned string points
@@ -174,6 +177,9 @@ const char* armnod_generate(struct armnod_generator* ag);
  * subsequent call to "strlen".
  */
 const char* armnod_generate_sz(struct armnod_generator* ag, uint64_t* sz);
+/* Generate the specified string from the set */
+const char* armnod_generate_idx(struct armnod_generator* ag, uint64_t idx);
+const char* armnod_generate_idx_sz(struct armnod_generator* ag, uint64_t idx, uint64_t* sz);
 
 #ifdef __cplusplus
 } /* extern "C" */
@@ -183,7 +189,7 @@ const char* armnod_generate_sz(struct armnod_generator* ag, uint64_t* sz);
 
 struct armnod_argparser
 {
-    static armnod_argparser* create(const char* prefix);
+    static armnod_argparser* create(const char* prefix, bool method=true);
     virtual ~armnod_argparser() throw () = 0;
     virtual const e::argparser& parser() = 0;
     virtual armnod_config* config() = 0;

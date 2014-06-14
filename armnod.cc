@@ -185,9 +185,11 @@ struct string_chooser
     virtual ~string_chooser() throw () {}
 
     virtual string_chooser* copy() = 0;
+    virtual void seed(uint64_t) = 0;
     virtual bool done() = 0;
     virtual bool has_index() = 0;
     virtual uint64_t index() = 0;
+    virtual uint64_t index(uint64_t idx) = 0;
 
     private:
         string_chooser(const string_chooser&);
@@ -200,9 +202,11 @@ struct string_chooser_arbitrary : public string_chooser
     virtual ~string_chooser_arbitrary() throw () {}
 
     virtual string_chooser* copy() { return new string_chooser_arbitrary(); }
+    virtual void seed(uint64_t) {}
     virtual bool done() { return false; }
     virtual bool has_index() { return false; }
     virtual uint64_t index() { return 0; }
+    virtual uint64_t index(uint64_t idx) { return idx; }
 
     private:
         string_chooser_arbitrary(const string_chooser_arbitrary&);
@@ -221,6 +225,7 @@ struct string_chooser_fixed : public string_chooser
     virtual ~string_chooser_fixed() throw () {}
 
     virtual string_chooser* copy() { return new string_chooser_fixed(m_set_size); }
+    virtual void seed(uint64_t s) { m_guacamole->seek(s); }
     virtual bool done() { return false; }
     virtual bool has_index() { return true; }
     virtual uint64_t index()
@@ -228,6 +233,10 @@ struct string_chooser_fixed : public string_chooser
         uint64_t x = m_guacamole->generate(m_bits) * m_scale;
         assert(x < m_set_size);
         return x;
+    }
+    virtual uint64_t index(uint64_t idx)
+    {
+        return idx;
     }
 
     private:
@@ -246,9 +255,14 @@ struct string_chooser_fixed_once : public string_chooser
     virtual ~string_chooser_fixed_once() throw () {}
 
     virtual string_chooser* copy() { return new string_chooser_fixed_once(m_set_size); }
+    virtual void seed(uint64_t) {}
     virtual bool done() { return m_idx >= m_set_size; }
     virtual bool has_index() { return true; }
     virtual uint64_t index() { return m_idx++; }
+    virtual uint64_t index(uint64_t idx)
+    {
+        return idx;
+    }
 
     private:
         uint64_t m_set_size;
@@ -350,9 +364,13 @@ struct armnod_generator
     armnod_generator(const armnod_config* config);
     ~armnod_generator() throw ();
 
+    void seed(uint64_t);
     const char* generate(uint64_t* sz);
+    const char* generate_idx(uint64_t idx, uint64_t* sz);
 
     private:
+        const char* generate_from_position(uint64_t* sz);
+
         const std::auto_ptr<guacamole_prng> m_guacamole;
         const std::auto_ptr<string_chooser> m_strings;
         const std::auto_ptr<length_chooser> m_lengths;
@@ -372,6 +390,21 @@ YGOR_API armnod_config*
 armnod_config_create()
 {
     return new (std::nothrow) armnod_config();
+}
+
+YGOR_API armnod_config*
+armnod_config_copy(armnod_config* other)
+{
+    armnod_config* c = new (std::nothrow) armnod_config();
+
+    if (c)
+    {
+        c->alphabet = other->alphabet;
+        c->strings.reset(other->strings->copy());
+        c->lengths.reset(other->lengths->copy());
+    }
+
+    return c;
 }
 
 YGOR_API void
@@ -494,6 +527,13 @@ armnod_generator_destroy(struct armnod_generator* ag)
     delete ag;
 }
 
+YGOR_API void
+armnod_seed(struct armnod_generator* ag, uint64_t seed)
+{
+    assert(ag);
+    ag->seed(seed);
+}
+
 YGOR_API const char*
 armnod_generate(struct armnod_generator* ag)
 {
@@ -507,13 +547,27 @@ armnod_generate_sz(struct armnod_generator* ag, uint64_t* sz)
     return ag->generate(sz);
 }
 
+YGOR_API const char*
+armnod_generate_idx(struct armnod_generator* ag, uint64_t idx)
+{
+    uint64_t sz;
+    return ag->generate_idx(idx, &sz);
+}
+
+YGOR_API const char*
+armnod_generate_idx_sz(struct armnod_generator* ag,
+                       uint64_t idx, uint64_t* sz)
+{
+    return ag->generate_idx(idx, sz);
+}
+
 } // extern "C"
 
 /////////////////////////// Argparser Implementation ///////////////////////////
 
 struct armnod_argparser_impl : public armnod_argparser
 {
-    armnod_argparser_impl(const char* prefix);
+    armnod_argparser_impl(const char* prefix, bool method);
     virtual ~armnod_argparser_impl() throw () {}
     virtual const e::argparser& parser() { return ap; }
     virtual armnod_config* config();
@@ -536,16 +590,16 @@ struct armnod_argparser_impl : public armnod_argparser
 };
 
 YGOR_API armnod_argparser*
-armnod_argparser :: create(const char* prefix)
+armnod_argparser :: create(const char* prefix, bool method)
 {
-    return new (std::nothrow) armnod_argparser_impl(prefix);
+    return new (std::nothrow) armnod_argparser_impl(prefix, method);
 }
 
 armnod_argparser :: ~armnod_argparser() throw ()
 {
 }
 
-armnod_argparser_impl :: armnod_argparser_impl(const char* _prefix)
+armnod_argparser_impl :: armnod_argparser_impl(const char* _prefix, bool method)
     : ap()
     , configuration()
     , alphabet(NULL)
@@ -566,14 +620,19 @@ armnod_argparser_impl :: armnod_argparser_impl(const char* _prefix)
             .description("charset to use for generated strings")
             .metavar("NAME")
             .as_string(&charset);
-    ap.arg().long_name((prefix + "strings").c_str())
-            .description("method to use to generate strings (e.g. \"default\", \"fixed\", etc.)")
-            .metavar("METHOD")
-            .as_string(&strings);
-    ap.arg().long_name((prefix + "fixed-size").c_str())
-            .description("cardinality of the set of strings that are generated (for methods that support it")
-            .metavar("NUM")
-            .as_long(&strings_fixed);
+
+    if (method)
+    {
+        ap.arg().long_name((prefix + "strings").c_str())
+                .description("method to use to generate strings (e.g. \"default\", \"fixed\", etc.)")
+                .metavar("METHOD")
+                .as_string(&strings);
+        ap.arg().long_name((prefix + "fixed-size").c_str())
+                .description("cardinality of the set of strings that are generated (for methods that support it)")
+                .metavar("NUM")
+                .as_long(&strings_fixed);
+    }
+
     ap.arg().long_name((prefix + "lengths").c_str())
             .description("method to use to select string length (e.g. \"constant\", \"uniform\", etc.)")
             .metavar("METHOD")
@@ -674,6 +733,13 @@ armnod_generator :: ~armnod_generator() throw ()
     }
 }
 
+void
+armnod_generator :: seed(uint64_t s)
+{
+    m_guacamole->seek(s);
+    m_strings->seed(s);
+}
+
 #pragma GCC diagnostic ignored "-Wunsafe-loop-optimizations"
 
 const char*
@@ -689,6 +755,23 @@ armnod_generator :: generate(uint64_t* sz)
         m_guacamole->seek(m_strings->index());
     }
 
+    return generate_from_position(sz);
+}
+
+const char*
+armnod_generator :: generate_idx(uint64_t idx, uint64_t* sz)
+{
+    if (m_strings->has_index())
+    {
+        m_guacamole->seek(m_strings->index(idx));
+    }
+
+    return generate_from_position(sz);
+}
+
+const char*
+armnod_generator :: generate_from_position(uint64_t* sz)
+{
     uint64_t length = m_lengths->length(m_guacamole.get());
     uint64_t rounded = (length + LENGTH_MASK) & ~LENGTH_MASK;
     assert(length <= rounded && length + LENGTH_ROUNDUP > rounded);

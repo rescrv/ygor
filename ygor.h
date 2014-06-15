@@ -186,6 +186,10 @@ const char* armnod_generate_sz(struct armnod_generator* ag, uint64_t* sz);
 /* Generate the specified string from the set */
 const char* armnod_generate_idx(struct armnod_generator* ag, uint64_t idx);
 const char* armnod_generate_idx_sz(struct armnod_generator* ag, uint64_t idx, uint64_t* sz);
+/* Return the member of the set that would be generated (always 0 if not
+ * supported by string generation method, e.g. non-fixed sets)
+ */
+uint64_t armnod_generate_idx_only(struct armnod_generator* ag);
 
 #ifdef __cplusplus
 } /* extern "C" */

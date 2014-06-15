@@ -469,6 +469,7 @@ struct armnod_generator
     void seed(uint64_t);
     const char* generate(uint64_t* sz);
     const char* generate_idx(uint64_t idx, uint64_t* sz);
+    uint64_t generate_idx_only();
 
     private:
         const char* generate_from_position(uint64_t* sz);
@@ -477,7 +478,7 @@ struct armnod_generator
         const std::auto_ptr<string_chooser> m_strings;
         const std::auto_ptr<length_chooser> m_lengths;
         char* m_buffer;
-        char m_alphabet[1U << 8] __attribute__ ((aligned (64)));
+        char m_alphabet[256] __attribute__ ((aligned (64)));
 
         armnod_generator(const armnod_generator&);
         armnod_generator& operator = (const armnod_generator&);
@@ -672,6 +673,12 @@ armnod_generate_idx_sz(struct armnod_generator* ag,
     return ag->generate_idx(idx, sz);
 }
 
+YGOR_API uint64_t
+armnod_generate_idx_only(struct armnod_generator* ag)
+{
+    return ag->generate_idx_only();
+}
+
 } // extern "C"
 
 /////////////////////////// Argparser Implementation ///////////////////////////
@@ -832,7 +839,7 @@ armnod_generator :: armnod_generator(const armnod_config* config)
     : m_guacamole(new guacamole_prng())
     , m_strings(config->strings->copy())
     , m_lengths(config->lengths->copy())
-    , m_buffer(new char[m_lengths->max() + LENGTH_ROUNDUP])
+    , m_buffer(new char[config->lengths->max() + LENGTH_ROUNDUP * sizeof(char)])
 {
     assert(config->alphabet.size() < 256);
 
@@ -888,6 +895,17 @@ armnod_generator :: generate_idx(uint64_t idx, uint64_t* sz)
     }
 
     return generate_from_position(sz);
+}
+
+uint64_t
+armnod_generator :: generate_idx_only()
+{
+    if (m_strings->has_index())
+    {
+        return m_strings->index();
+    }
+
+    return 0;
 }
 
 const char*

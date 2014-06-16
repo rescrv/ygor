@@ -48,6 +48,7 @@ main(int argc, const char* argv[])
     cmds.push_back(e::subcommand("summarize",   "Generate a summary of the data"));
     cmds.push_back(e::subcommand("timeseries",  "Generate a timeseries of the data"));
     cmds.push_back(e::subcommand("t-test",      "Run the Student's t-test on multiple data files"));
+    cmds.push_back(e::subcommand("graph",       "Graph gnuplot files with Jinaj2 preprocessing"));
     return dispatch_to_subcommands(argc, argv,
                                    "ygor", "ygor",
                                    PACKAGE_VERSION,

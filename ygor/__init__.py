@@ -56,8 +56,12 @@ __all__ = ('Experiment', 'Host', 'HostSet', 'Parameter', 'Utility')
 
 class Experiment(object):
 
-    def __init__(self):
+    def __init__(self, path):
+        self.path = path
         self.output = None
+
+    def get_path(self):
+        return self.path
 
     def get_parameters(self):
         params = []
@@ -108,11 +112,28 @@ class Experiment(object):
             params.append(p + '=' + str(x))
         return ','.join(params)
 
+    def get_output_dir(self, trial, name=None):
+        path = self.get_path()
+        ps = self.get_parameter_string()
+        x = os.path.join(path, ps, trial)
+        if name is not None:
+            x += '-' + name
+        return x
+
+    def load_parameters_from_dict(self, d):
+        for param in self.get_parameters():
+            old_value = getattr(self, param.upper())
+            new_value = d.get(param, old_value)
+            if new_value is not old_value:
+                new_value = old_value.cast(new_value)
+                setattr(self, param.upper(), new_value)
+
     def load_parameters_from_config(self, config):
         for param in self.get_parameters():
             old_value = getattr(self, param.upper())
             new_value = config.get_parameter(param, old_value)
-            if old_value != new_value:
+            if new_value is not old_value:
+                new_value = old_value.cast(new_value)
                 setattr(self, param.upper(), new_value)
 
     def load_parameters_from_cmdline(self, cmdline):
@@ -123,7 +144,7 @@ class Experiment(object):
                 raise RuntimeError('Command line parameter %s not an '
                                    'experimental parameter')
             new_value = getattr(self, param.upper()).cast(value)
-            setattr(self, param.upper(), new_value)
+            setattr(self, param.upper(), Parameter(new_value))
 
     def load_hosts_from_config(self, config):
         for name in self.get_hosts():
@@ -443,23 +464,13 @@ def Utility(original_function):
 def get_experiment(path):
     mod, cls = path.rsplit('.', 1)
     try:
-        return getattr(importlib.import_module(mod), cls)
+        return getattr(importlib.import_module(mod), cls)(path)
     except ImportError as e:
         raise RuntimeError('Could not import module %s.\n'
                            'Make sure it\'s in your Python path.\nImportError: %s' % (mod, e.message))
     except AttributeError:
         raise RuntimeError('No class %s in module %s.' % (cls, mod))
 
-
-def experiment_output_path(args, exp, trial_name):
-    ps = exp.get_parameter_string()
-    path = os.path.join(args.experiment, ps, trial_name)
-    if args.name:
-        path += '-' + args.name
-    if os.path.exists(path) and not args.overwrite:
-        raise RuntimeError('Experiment already run.  '
-                           'To run, erase:\n' + path)
-    return path
 
 def run(argv):
     parser = argparse.ArgumentParser()
@@ -474,14 +485,17 @@ def run(argv):
     parser.add_argument('configuration', help='Configuration for experiment parameters')
     parser.add_argument('trials', nargs='+', help='A list of trials to run')
     args = parser.parse_args(argv)
-    exp = get_experiment(args.experiment)()
+    exp = get_experiment(args.experiment)
     cfg = Configuration(exp, args.configuration, args.params)
     for trial_name in args.trials:
         if not hasattr(exp, trial_name):
             raise RuntimeError('Experiment has no trial %s' % trial_name)
-        path = experiment_output_path(args, exp, trial_name)
+        path = exp.get_output_dir(trial_name, args.name)
+        if os.path.exists(path) and not args.overwrite:
+            raise RuntimeError('Experiment already run.  '
+                               'To run, erase:\n' + path)
     for trial_name in args.trials:
-        path = experiment_output_path(args, exp, trial_name)
+        path = exp.get_output_dir(trial_name, args.name)
         try:
             tmp = tempfile.mkdtemp(prefix='ygor-', dir='.')
             exp.output = tmp
@@ -501,7 +515,7 @@ def configure(argv):
     parser = argparse.ArgumentParser()
     parser.add_argument('experiment', help='Class name for the experiment')
     args = parser.parse_args(argv)
-    exp = get_experiment(args.experiment)()
+    exp = get_experiment(args.experiment)
     exp.get_parameters()
     cp = ConfigParser.RawConfigParser(allow_no_value=True)
     cp.add_section('parameters')

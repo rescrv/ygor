@@ -908,6 +908,12 @@ ygor_cdf(const char* input, uint64_t nanos,
          struct ygor_data_point** data, uint64_t* data_sz)
 {
     ygor_data_iterator* di = ygor_data_iterator_create(input);
+
+    if (!di)
+    {
+        return -1;
+    }
+
     std::vector<ygor_data_point> points;
     points.push_back(ygor_data_point());
     points[0].x = 0;
@@ -965,6 +971,12 @@ ygor_timeseries(const char* input, uint64_t nanos,
                 struct ygor_data_point** data, uint64_t* data_sz)
 {
     ygor_data_iterator* di = ygor_data_iterator_create(input);
+
+    if (!di)
+    {
+        return -1;
+    }
+
     std::vector<ygor_data_point> points;
     int status = 0;
 
@@ -1045,6 +1057,12 @@ YGOR_API int
 ygor_summarize(const char* input, struct ygor_summary* summary)
 {
     ygor_data_iterator* di = ygor_data_iterator_create(input);
+
+    if (!di)
+    {
+        return -1;
+    }
+
     uint64_t start = UINT64_MAX;
     uint64_t end = 0;
     double n = 0;

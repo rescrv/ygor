@@ -178,7 +178,7 @@ def main(argv):
     variables = parse_kv_pairs(args.variables)
     for p in args.plots:
         try:
-            plot(p, parameters, variables, True)
+            plot(p, parameters, variables, False)
         except jinja2.exceptions.UndefinedError as e:
             print('{0}: {1}'.format(p, e))
         except subprocess.CalledProcessError as e:

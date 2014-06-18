@@ -83,6 +83,10 @@ def add_cdf(ctx, datafile, flags=None, title=None):
     ctx['cdfs'].append((datafile, flags, title))
 
 
+def add_tput(ctx, datafile, flags=None, title=None):
+    ctx['tputs'].append((datafile, flags, title))
+
+
 def plot_cdf(ctx, *args):
     tmp = tempfile.NamedTemporaryFile(prefix='ygor-cdf.')
     ctx['tmp'].append(tmp)
@@ -92,6 +96,7 @@ def plot_cdf(ctx, *args):
         return p
     plots = tuple([ygor_args(p, f, t) for p, f, t in ctx['cdfs']])
     subprocess.check_call(('ygor', 'cdf') + args + plots, stdout=tmp)
+    tmp.flush()
     plots = []
     for idx, (plot, flags, title) in enumerate(ctx['cdfs']):
         plots.append('"{name}" using 1:{idx} with linespoints title "{title}"'
@@ -99,10 +104,35 @@ def plot_cdf(ctx, *args):
     return 'plot ' + ', \\\n     '.join(plots) + ';'
 
 
+def plot_tput(ctx, *args):
+    tmp = tempfile.NamedTemporaryFile(prefix='ygor-tput.', mode="rw+b")
+    ctx['tmp'].append(tmp)
+    def ygor_args(p, f, t):
+        if f is not None:
+            return str(f) + '@' + p
+        return p
+    plots = tuple([ygor_args(p, f, t) for p, f, t in ctx['tputs']])
+    subprocess.check_call(('ygor', 'summarize') + args + plots, stdout=tmp)
+    tmp.seek(0)
+    tmp2 = tempfile.NamedTemporaryFile(prefix='ygor-tput.')
+    ctx['tmp'].append(tmp2)
+    for idx, line in enumerate(tmp.read().split('\n')):
+        if not line: continue
+        tput = [x for x in line.split(' ') if x.startswith('through')][0]
+        tmp2.write('{0} "{1}" {2}\n'.format(idx, ctx['tputs'][idx][2], tput[11:]))
+    plots = []
+    for idx, (plot, flags, title) in enumerate(ctx['tputs']):
+        plots.append('"{name}" every ::{idx}::{idx} using 1:3:xtic(2) with boxes title "{title}"'
+                .format(name=tmp2.name, idx=idx, title=title))
+    tmp2.flush()
+    return 'plot ' + ', \\\n     '.join(plots) + ';'
+
+
 def expand_context(context, parameters=None):
     ctx = {}
     ctx['params'] = (parameters or {}).copy()
     ctx['cdfs'] = []
+    ctx['tputs'] = []
     ctx['tmp'] = []
     context['ctx'] = ctx
     context['parameters'] = {}
@@ -112,7 +142,9 @@ def expand_context(context, parameters=None):
     context['parameter'] = functools.partial(parameter, ctx)
     context['experiment_base'] = functools.partial(experiment_base, ctx)
     context['add_cdf'] = functools.partial(add_cdf, ctx)
+    context['add_tput'] = functools.partial(add_tput, ctx)
     context['plot_cdf'] = functools.partial(plot_cdf, ctx)
+    context['plot_tput'] = functools.partial(plot_tput, ctx)
 
 
 def plot(name, parameters=None, variables=None, makefile=False):

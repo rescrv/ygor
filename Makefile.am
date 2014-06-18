@@ -34,8 +34,10 @@ EXTRA_DIST  =
 EXTRA_DIST += LICENSE
 EXTRA_DIST += bin/ygor-configure
 EXTRA_DIST += bin/ygor-run
+EXTRA_DIST += bin/ygor-graph
 EXTRA_DIST += ygor/__init__.py
 EXTRA_DIST += ygor/collect.pyx
+EXTRA_DIST += ygor/graph.py
 
 bin_PROGRAMS = bin/ygor
 bin_ygor_SOURCES = ygor-cli.cc
@@ -45,6 +47,7 @@ ygorexecdir = $(libexecdir)/$(PACKAGE)-$(VERSION)
 ygorexec_SCRIPTS  =
 ygorexec_SCRIPTS += bin/ygor-configure
 ygorexec_SCRIPTS += bin/ygor-run
+ygorexec_SCRIPTS += bin/ygor-graph
 ygorexec_PROGRAMS  =
 ygorexec_PROGRAMS += bin/ygor-armnod
 ygorexec_PROGRAMS += bin/ygor-cdf
@@ -76,7 +79,7 @@ bin_ygor_t_test_SOURCES = ygor-t-test.cc
 bin_ygor_t_test_LDADD = libygor.la
 
 include_HEADERS = ygor.h
-noinst_HEADERS = ygor-internal.h
+noinst_HEADERS = ygor-internal.h guacamole.h
 
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = ygor.pc
@@ -88,6 +91,7 @@ libygor_la_LIBADD = $(E_LIBS)
 
 pkgpyexecdir = $(pyexecdir)/ygor
 pkgpyexec_DATA = ygor/__init__.py
+pkgpyexec_DATA = ygor/graph.py
 pkgpyexec_LTLIBRARIES = ygor/collect.la
 
 ygor_collect_la_SOURCES = ygor/collect.c

@@ -37,6 +37,9 @@ extern "C"
 #include <stdint.h>
 #include <stdio.h>
 
+/* POSIX */
+#include <sys/resource.h>
+
 /* data */
 struct ygor_data_record
 {
@@ -80,6 +83,61 @@ int ygor_bucket_size(const char* bucket, uint64_t* nanos);
 int ygor_validate_bucket_units(uint64_t bucket_nanos, uint64_t unit_nanos);
 /* find the largest unit such that value spans more nanoseconds than one unit */
 void ygor_autoscale(double value, const char** str);
+
+/* collect getrusage stats */
+int ygor_data_logger_record_rusage_stats(struct ygor_data_logger* ydl, uint64_t when, struct rusage* usage);
+
+/* collect system io stats (Linux only) */
+struct ygor_io_stats
+{
+    uint64_t read_ios;
+    uint64_t read_merges;
+    uint64_t read_bytes;
+    uint64_t read_ticks;
+    uint64_t write_ios;
+    uint64_t write_merges;
+    uint64_t write_bytes;
+    uint64_t write_ticks;
+    uint64_t in_flight;
+    uint64_t io_ticks;
+    uint64_t time_in_queue;
+};
+int ygor_io_block_stat_path(const char* path, char* stat_path, size_t stat_path_sz);
+int ygor_io_collect_stats(char* path, struct ygor_io_stats* stats);
+int ygor_data_logger_record_io_stats(struct ygor_data_logger* ydl, uint64_t when, const struct ygor_io_stats* stats);
+
+/* predefined series
+ * Ygor reserves series with bits 0xffff0000U set for itself.  They are used to
+ * collect system stats and the like that Ygor supports out-of-the-box.
+ */
+#define SERIES_RU_UTIME             0xffff0000U
+#define SERIES_RU_STIME             0xffff0001U
+#define SERIES_RU_MAXRSS            0xffff0002U
+#define SERIES_RU_IXRSS             0xffff0003U
+#define SERIES_RU_IDRSS             0xffff0004U
+#define SERIES_RU_ISRSS             0xffff0005U
+#define SERIES_RU_MINFLT            0xffff0006U
+#define SERIES_RU_MAJFLT            0xffff0007U
+#define SERIES_RU_NSWAP             0xffff0008U
+#define SERIES_RU_INBLOCK           0xffff0009U
+#define SERIES_RU_OUBLOCK           0xffff000aU
+#define SERIES_RU_MSGSND            0xffff000bU
+#define SERIES_RU_MSGRCV            0xffff000cU
+#define SERIES_RU_NSIGNALS          0xffff000dU
+#define SERIES_RU_NVCSW             0xffff000eU
+#define SERIES_RU_NIVCSW            0xffff000fU
+
+#define SERIES_IO_READ_IOS          0xffff0010U
+#define SERIES_IO_READ_MERGES       0xffff0011U
+#define SERIES_IO_READ_BYTES        0xffff0012U
+#define SERIES_IO_READ_TICKS        0xffff0013U
+#define SERIES_IO_WRITE_IOS         0xffff0014U
+#define SERIES_IO_WRITE_MERGES      0xffff0015U
+#define SERIES_IO_WRITE_BYTES       0xffff0016U
+#define SERIES_IO_WRITE_TICKS       0xffff0017U
+#define SERIES_IO_IN_FLIGHT         0xffff0018U
+#define SERIES_IO_IO_TICKS          0xffff0019U
+#define SERIES_IO_TIME_IN_QUEUE     0xffff001aU
 
 /* data analysis */
 struct ygor_data_point

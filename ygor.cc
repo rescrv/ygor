@@ -34,9 +34,12 @@
 #include <cstring>
 
 // POSIX
+#include <dirent.h>
 #include <fcntl.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <sys/resource.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -285,7 +288,12 @@ int
 ygor_data_logger :: record(ygor_data_record* dr)
 {
     dr->when = floor(double(dr->when) / double(m_scale_when) + 0.5);
-    dr->data = floor(double(dr->data) / double(m_scale_data) + 0.5);
+
+    if (dr->series < 0xffff0000U)
+    {
+        dr->data = floor(double(dr->data) / double(m_scale_data) + 0.5);
+    }
+
     m_data_mtx.lock();
     m_data.push_back(*dr);
 
@@ -357,6 +365,7 @@ ygor_data_logger :: do_write(ygor_data_record* start,
 
     for (ssize_t i = 0; i < limit - start; ++i)
     {
+        assert(start[i].when >= prev);
         ptr = buf;
         ptr = e::varint64_encode(ptr, start[i].when - prev);
         ptr = e::varint64_encode(ptr, start[i].data);
@@ -605,12 +614,20 @@ ygor_data_iterator :: valid()
 
             when += prev;
 
-            if (m_series == 0 || series == m_series)
+            if ((m_series == 0 && series < 0xffff0000U) ||
+                m_series == UINT32_MAX ||
+                series == m_series)
             {
                 ygor_data_record dr;
                 dr.series = series;
                 dr.when = when * m_when_scale;
-                dr.data = data * m_data_scale;
+                dr.data = data;
+
+                if (dr.series < 0xffff0000U)
+                {
+                    dr.data *= m_data_scale;
+                }
+
                 m_data.push_back(dr);
             }
 
@@ -901,6 +918,259 @@ ygor_autoscale(double value, const char** str)
     {
         *str = "s";
     }
+}
+
+YGOR_API int
+ygor_data_logger_record_rusage_stats(struct ygor_data_logger* ydl, uint64_t when, struct rusage* usage)
+{
+    ygor_data_record ydr;
+    ydr.when    = when;
+    ydr.series  = SERIES_RU_UTIME;
+    ydr.data    = usage->ru_utime.tv_sec * 1000000ULL + usage->ru_utime.tv_usec;
+    if (ygor_data_logger_record(ydl, &ydr) < 0) { return -1; }
+    ydr.series  = SERIES_RU_STIME;
+    ydr.data    = usage->ru_stime.tv_sec * 1000000ULL + usage->ru_stime.tv_usec;
+    if (ygor_data_logger_record(ydl, &ydr) < 0) { return -1; }
+    ydr.series  = SERIES_RU_MAXRSS;
+    ydr.data    = usage->ru_maxrss;
+    if (ygor_data_logger_record(ydl, &ydr) < 0) { return -1; }
+    ydr.series  = SERIES_RU_IXRSS;
+    ydr.data    = usage->ru_ixrss;
+    if (ygor_data_logger_record(ydl, &ydr) < 0) { return -1; }
+    ydr.series  = SERIES_RU_IDRSS;
+    ydr.data    = usage->ru_idrss;
+    if (ygor_data_logger_record(ydl, &ydr) < 0) { return -1; }
+    ydr.series  = SERIES_RU_ISRSS;
+    ydr.data    = usage->ru_isrss;
+    if (ygor_data_logger_record(ydl, &ydr) < 0) { return -1; }
+    ydr.series  = SERIES_RU_MINFLT;
+    ydr.data    = usage->ru_minflt;
+    if (ygor_data_logger_record(ydl, &ydr) < 0) { return -1; }
+    ydr.series  = SERIES_RU_MAJFLT;
+    ydr.data    = usage->ru_majflt;
+    if (ygor_data_logger_record(ydl, &ydr) < 0) { return -1; }
+    ydr.series  = SERIES_RU_NSWAP;
+    ydr.data    = usage->ru_nswap;
+    if (ygor_data_logger_record(ydl, &ydr) < 0) { return -1; }
+    ydr.series  = SERIES_RU_INBLOCK;
+    ydr.data    = usage->ru_inblock;
+    if (ygor_data_logger_record(ydl, &ydr) < 0) { return -1; }
+    ydr.series  = SERIES_RU_OUBLOCK;
+    ydr.data    = usage->ru_oublock;
+    if (ygor_data_logger_record(ydl, &ydr) < 0) { return -1; }
+    ydr.series  = SERIES_RU_MSGSND;
+    ydr.data    = usage->ru_msgsnd;
+    if (ygor_data_logger_record(ydl, &ydr) < 0) { return -1; }
+    ydr.series  = SERIES_RU_MSGRCV;
+    ydr.data    = usage->ru_msgrcv;
+    if (ygor_data_logger_record(ydl, &ydr) < 0) { return -1; }
+    ydr.series  = SERIES_RU_NSIGNALS;
+    ydr.data    = usage->ru_nsignals;
+    if (ygor_data_logger_record(ydl, &ydr) < 0) { return -1; }
+    ydr.series  = SERIES_RU_NVCSW;
+    ydr.data    = usage->ru_nvcsw;
+    if (ygor_data_logger_record(ydl, &ydr) < 0) { return -1; }
+    ydr.series  = SERIES_RU_NIVCSW;
+    ydr.data    = usage->ru_nivcsw;
+    if (ygor_data_logger_record(ydl, &ydr) < 0) { return -1; }
+    return 0;
+}
+
+YGOR_API int
+ygor_io_block_stat_path(const char* _path, char* stat_path, size_t stat_path_sz)
+{
+    po6::pathname path;
+
+    try
+    {
+        path = po6::pathname(_path).realpath();
+    }
+    catch (po6::error& e)
+    {
+        return -1;
+    }
+
+    std::vector<std::string> block_devs;
+    DIR* dir = opendir("/sys/block");
+    struct dirent* ent = NULL;
+
+    if (dir == NULL)
+    {
+        return -1;
+    }
+
+    errno = 0;
+
+    while ((ent = readdir(dir)) != NULL)
+    {
+        block_devs.push_back(ent->d_name);
+    }
+
+    closedir(dir);
+
+    if (errno != 0)
+    {
+        return -1;
+    }
+
+    FILE* mounts = fopen("/proc/mounts", "r");
+
+    if (!mounts)
+    {
+        return -1;
+    }
+
+    char* line = NULL;
+    size_t line_sz = 0;
+    size_t max_mnt_sz = 0;
+    bool done = false;
+    bool error = false;
+
+    while (!done && !error)
+    {
+        ssize_t amt = getline(&line, &line_sz, mounts);
+
+        if (amt < 0)
+        {
+            if (ferror(mounts) != 0)
+            {
+                error = true;
+                break;
+            }
+
+            if (feof(mounts) != 0)
+            {
+                break;
+            }
+
+            error = true;
+            break;
+        }
+
+        char dev[4096];
+        char mnt[4096];
+        int pts = sscanf(line, "%4095s %4095s", dev, mnt);
+
+        if (pts != 2)
+        {
+            continue;
+        }
+
+        size_t msz = strlen(mnt);
+
+        if (strncmp(mnt, path.get(), msz) != 0 ||
+            msz < max_mnt_sz)
+        {
+            continue;
+        }
+
+        std::string dev_path;
+
+        try
+        {
+            dev_path = po6::pathname(dev).realpath().basename().get();
+        }
+        catch (po6::error& e)
+        {
+            dev_path = po6::pathname(dev).basename().get();
+        }
+
+        for (size_t i = 0; i < block_devs.size(); ++i)
+        {
+            size_t dsz = std::min(dev_path.size(), block_devs[i].size());
+
+            if (strncmp(block_devs[i].c_str(), dev_path.c_str(), dsz) == 0)
+            {
+                max_mnt_sz = msz;
+                std::string block_dev_path = std::string("/sys/block/") + block_devs[i] + "/stat";
+
+                if (block_dev_path.size() + 1 < stat_path_sz)
+                {
+                    memmove(stat_path, block_dev_path.c_str(), block_dev_path.size() + 1);
+                    done = true;
+                }
+            }
+        }
+    }
+
+    if (line)
+    {
+        free(line);
+    }
+
+    fclose(mounts);
+    return done ? 0 : -1;
+}
+
+YGOR_API int
+ygor_io_collect_stats(char* path, struct ygor_io_stats* stats)
+{
+    FILE* fin = fopen(path, "r");
+
+    if (!fin)
+    {
+        return -1;
+    }
+
+    uint64_t read_sectors;
+    uint64_t write_sectors;
+    int x = fscanf(fin, "%lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu",
+                   &stats->read_ios, &stats->read_merges, &read_sectors, &stats->read_ticks,
+                   &stats->write_ios, &stats->write_merges, &write_sectors, &stats->write_ticks,
+                   &stats->in_flight, &stats->io_ticks, &stats->time_in_queue);
+    fclose(fin);
+
+    if (x == 11)
+    {
+        stats->read_bytes = read_sectors * 512;
+        stats->write_bytes = write_sectors * 512;
+        return 0;
+    }
+
+    return -1;
+}
+
+YGOR_API int
+ygor_data_logger_record_io_stats(struct ygor_data_logger* ydl,
+                                 uint64_t when,
+                                 const struct ygor_io_stats* stats)
+{
+    ygor_data_record ydr;
+    ydr.when    = when;
+    ydr.series  = SERIES_IO_READ_IOS;
+    ydr.data    = stats->read_ios;
+    if (ygor_data_logger_record(ydl, &ydr) < 0) { return -1; }
+    ydr.series  = SERIES_IO_READ_MERGES;
+    ydr.data    = stats->read_merges;
+    if (ygor_data_logger_record(ydl, &ydr) < 0) { return -1; }
+    ydr.series  = SERIES_IO_READ_BYTES;
+    ydr.data    = stats->read_bytes;
+    if (ygor_data_logger_record(ydl, &ydr) < 0) { return -1; }
+    ydr.series  = SERIES_IO_READ_TICKS;
+    ydr.data    = stats->read_ticks;
+    if (ygor_data_logger_record(ydl, &ydr) < 0) { return -1; }
+    ydr.series  = SERIES_IO_WRITE_IOS;
+    ydr.data    = stats->write_ios;
+    if (ygor_data_logger_record(ydl, &ydr) < 0) { return -1; }
+    ydr.series  = SERIES_IO_WRITE_MERGES;
+    ydr.data    = stats->write_merges;
+    if (ygor_data_logger_record(ydl, &ydr) < 0) { return -1; }
+    ydr.series  = SERIES_IO_WRITE_BYTES;
+    ydr.data    = stats->write_bytes;
+    if (ygor_data_logger_record(ydl, &ydr) < 0) { return -1; }
+    ydr.series  = SERIES_IO_WRITE_TICKS;
+    ydr.data    = stats->write_ticks;
+    if (ygor_data_logger_record(ydl, &ydr) < 0) { return -1; }
+    ydr.series  = SERIES_IO_IN_FLIGHT;
+    ydr.data    = stats->in_flight;
+    if (ygor_data_logger_record(ydl, &ydr) < 0) { return -1; }
+    ydr.series  = SERIES_IO_IO_TICKS;
+    ydr.data    = stats->io_ticks;
+    if (ygor_data_logger_record(ydl, &ydr) < 0) { return -1; }
+    ydr.series  = SERIES_IO_TIME_IN_QUEUE;
+    ydr.data    = stats->time_in_queue;
+    if (ygor_data_logger_record(ydl, &ydr) < 0) { return -1; }
+    return 0;
 }
 
 YGOR_API int

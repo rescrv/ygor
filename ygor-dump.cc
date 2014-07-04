@@ -58,8 +58,8 @@ main(int argc, const char* argv[])
     {
         ygor_data_record dr;
         ygor_data_iterator_read(ydi, &dr);
-        fprintf(stdout, "flags=%04x, when=%lu, data=%lu\n",
-                        dr.flags, dr.when, dr.data);
+        fprintf(stdout, "series=%04x, when=%lu, data=%lu\n",
+                        dr.series, dr.when, dr.data);
         ygor_data_iterator_advance(ydi);
     }
 

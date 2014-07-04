@@ -162,14 +162,14 @@ class bucket_scale_opts
 };
 
 inline bool
-compare_by_flags_then_when(const ygor_data_record& lhs,
-                           const ygor_data_record& rhs)
+compare_by_series_then_when(const ygor_data_record& lhs,
+                            const ygor_data_record& rhs)
 {
-    if (lhs.flags < rhs.flags)
+    if (lhs.series < rhs.series)
     {
         return true;
     }
-    else if (lhs.flags == rhs.flags)
+    else if (lhs.series == rhs.series)
     {
         return lhs.when < rhs.when;
     }

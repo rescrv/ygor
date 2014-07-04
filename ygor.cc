@@ -307,7 +307,7 @@ ygor_data_logger :: record(ygor_data_record* dr)
 bool
 ygor_data_logger :: do_write(std::vector<ygor_data_record>* drs)
 {
-    std::sort(drs->begin(), drs->end(), compare_by_flags_then_when);
+    std::sort(drs->begin(), drs->end(), compare_by_series_then_when);
 
     if (drs->empty())
     {
@@ -319,10 +319,10 @@ ygor_data_logger :: do_write(std::vector<ygor_data_record>* drs)
 
     while (ptr < end)
     {
-        // end of contiguous range with the same flags
+        // end of contiguous range with the same series
         ygor_data_record* eor = ptr;
 
-        while (eor < end && ptr->flags == eor->flags)
+        while (eor < end && ptr->series == eor->series)
         {
             ++eor;
         }
@@ -346,7 +346,7 @@ ygor_data_logger :: do_write(ygor_data_record* start,
     char buf[buf_sz];
     char* ptr = buf;
     ptr = e::varint64_encode(ptr, limit - start);
-    ptr = e::varint64_encode(ptr, start->flags);
+    ptr = e::varint64_encode(ptr, start->series);
 
     if (fwrite(buf, ptr - buf, 1, m_out) != 1)
     {
@@ -395,7 +395,7 @@ class ygor_data_iterator
     private:
         FILE* m_in;
         pid_t m_child;
-        uint32_t m_flags;
+        uint32_t m_series;
         std::vector<ygor_data_record> m_data;
         size_t m_data_idx;
         uint64_t m_when_scale;
@@ -408,7 +408,7 @@ class ygor_data_iterator
 ygor_data_iterator :: ygor_data_iterator()
     : m_in(NULL)
     , m_child(-1)
-    , m_flags(0)
+    , m_series(0)
     , m_data()
     , m_data_idx(0)
     , m_when_scale(1)
@@ -439,18 +439,18 @@ ygor_data_iterator :: open(const char* input)
 {
     using ::close;
 
-    // read the flags
+    // read the series
     char* end = NULL;
-    uint32_t flags = strtoul(input, &end, 10);
+    uint32_t series = strtoul(input, &end, 10);
 
     if (end && *end == '@')
     {
-        m_flags = flags;
+        m_series = series;
         input = end + 1;
     }
     else
     {
-        m_flags = 0;
+        m_series = 0;
     }
 
     // check if we're reading a bz2 file
@@ -569,10 +569,10 @@ ygor_data_iterator :: valid()
         m_data.clear();
         m_data_idx = 0;
         uint64_t num_data_points;
-        uint64_t flags;
+        uint64_t series;
 
         if (!read_number(&num_data_points) ||
-            !read_number(&flags))
+            !read_number(&series))
         {
             return m_eof ? 0 : -1;
         }
@@ -584,7 +584,7 @@ ygor_data_iterator :: valid()
         }
 
         // overflow on cast?
-        if ((flags & UINT32_MAX) != flags)
+        if ((series & UINT32_MAX) != series)
         {
             m_error = true;
             return -1;
@@ -605,10 +605,10 @@ ygor_data_iterator :: valid()
 
             when += prev;
 
-            if ((flags & m_flags) == m_flags)
+            if (m_series == 0 || series == m_series)
             {
                 ygor_data_record dr;
-                dr.flags = flags;
+                dr.series = series;
                 dr.when = when * m_when_scale;
                 dr.data = data * m_data_scale;
                 m_data.push_back(dr);

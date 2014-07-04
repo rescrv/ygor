@@ -40,7 +40,7 @@ extern "C"
 /* data */
 struct ygor_data_record
 {
-    uint32_t flags;
+    uint32_t series;
     uint64_t when;
     uint64_t data;
 };

@@ -34,7 +34,7 @@ cdef extern from "stdint.h":
 cdef extern from "ygor.h":
 
     cdef struct ygor_data_record:
-        uint32_t flags
+        uint32_t series
         uint64_t when
         uint64_t data
 
@@ -65,10 +65,10 @@ cdef class DataLogger:
         if self.dl:
             self.flush_and_destroy()
 
-    def record(self, long flags, long when, long data):
+    def record(self, long series, long when, long data):
         cdef ygor_data_record ydr
         assert(self.dl)
-        ydr.flags = flags
+        ydr.series = series
         ydr.when = when
         ydr.data = data
         if ygor_data_logger_record(self.dl, &ydr) < 0:

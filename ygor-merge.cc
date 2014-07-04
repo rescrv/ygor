@@ -43,7 +43,7 @@ typedef std::pair<ygor_data_record, ygor_data_iterator*> heap_elem;
 bool
 heap_func(const heap_elem& lhs, const heap_elem& rhs)
 {
-    return compare_by_flags_then_when(rhs.first, lhs.first);
+    return compare_by_series_then_when(rhs.first, lhs.first);
 }
 
 int

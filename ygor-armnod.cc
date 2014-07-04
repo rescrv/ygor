@@ -65,7 +65,7 @@ main(int argc, const char* argv[])
 
     for (uint64_t i = 0; ; ++i)
     {
-        if ((i & 0xffff) == 0)
+        if ((i & 0xf) == 0)
         {
             sigpending(&mask);
 

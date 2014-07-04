@@ -39,15 +39,13 @@
 int
 main(int argc, const char* argv[])
 {
-    long flags = 0;
     long fill = 0;
     bool omit_empty = false;
     e::argparser ap;
     ap.autohelp();
     ap.option_string("<input file> [<input file> ...]");
     ap.arg().name('e', "omit-empty").description("Omit empty data points (default: treat as 100%)").set_true(&omit_empty);
-    ap.arg().name('f', "flags").description("Flags to select (default: 0 -- everything)").as_long(&flags);
-    ap.arg().name('F', "fill").description("Appends 100%% up to the given bucket (default: no fill)").as_long(&fill);
+    ap.arg().name('f', "fill").description("Appends 100%% up to the given bucket (default: no fill)").as_long(&fill);
     bucket_scale_opts bso;
     ap.add("Units:", bso.parser());
 

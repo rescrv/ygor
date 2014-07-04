@@ -41,12 +41,10 @@ int
 main(int argc, const char* argv[])
 {
     double interval = 95;
-    long flags = 0;
     e::argparser ap;
     ap.autohelp();
     ap.option_string("<baseline> [<comparison> ...]");
     ap.arg().name('i', "interval").description("Confidence interval in percent as an integer (default: 95%)").as_double(&interval);
-    ap.arg().name('f', "flags").description("Flags to select (default: 0 -- everything)").as_long(&flags);
     scale_opts so;
     ap.add("Units:", so.parser());
 

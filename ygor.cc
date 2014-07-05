@@ -449,17 +449,26 @@ ygor_data_iterator :: open(const char* input)
     using ::close;
 
     // read the series
-    char* end = NULL;
-    uint32_t series = strtoul(input, &end, 10);
+    const char* atsym = strchr(input, '@');
+    m_series = 0;
 
-    if (end && *end == '@')
+    if (atsym)
     {
-        m_series = series;
-        input = end + 1;
-    }
-    else
-    {
-        m_series = 0;
+        std::string series_str(input, atsym);
+        char* end = NULL;
+        uint32_t series = strtoul(series_str.c_str(), &end, 0);
+
+        if (end && *end == '\0')
+        {
+            m_series = series;
+        }
+        else
+        {
+            errno = EINVAL;
+            return -1;
+        }
+
+        input = atsym + 1;
     }
 
     // check if we're reading a bz2 file

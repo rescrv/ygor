@@ -450,6 +450,8 @@ class Parameter(object):
         return self.value
 
     def cast(self, value):
+        if isinstance(value, Parameter):
+            value = value.value
         try:
             return Parameter(type(self.value)(value))
         except ValueError as e:

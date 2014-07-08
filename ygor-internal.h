@@ -31,7 +31,8 @@
 // e
 #include <e/popt.h>
 
-#define YGOR_API __attribute__ ((visibility ("default")))
+// Ygor
+#include "visibility.h"
 
 struct ygor_series
 {

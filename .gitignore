@@ -2,10 +2,12 @@
 .deps
 .dirstamp
 .libs
+*.jar
 *.la
 *.lo
 *.o
 *.pyc
+/bindings/java/net/rescrv/*/*.class
 # specific files
 /aclocal.m4
 /autom4te.cache

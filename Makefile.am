@@ -30,6 +30,8 @@ AM_CPPFLAGS = $(PO6_CFLAGS) $(E_CFLAGS)
 AM_CFLAGS   = -fvisibility=hidden $(PO6_CFLAGS) $(E_CFLAGS) $(WANAL_CFLAGS)
 AM_CXXFLAGS = -fvisibility=hidden -fvisibility-inlines-hidden $(PO6_CFLAGS) $(E_CFLAGS) $(WANAL_CXXFLAGS)
 
+CLEANFILES =
+
 EXTRA_DIST  =
 EXTRA_DIST += LICENSE
 EXTRA_DIST += bin/ygor-configure
@@ -90,8 +92,9 @@ libygor_la_SOURCES = ygor.cc armnod.cc guacamole.cc
 libygor_la_LIBADD = $(E_LIBS)
 
 pkgpyexecdir = $(pyexecdir)/ygor
-pkgpyexec_DATA = ygor/__init__.py
-pkgpyexec_DATA = ygor/graph.py
+pkgpyexec_DATA =
+pkgpyexec_DATA += ygor/__init__.py
+pkgpyexec_DATA += ygor/graph.py
 pkgpyexec_LTLIBRARIES = ygor/collect.la
 
 ygor_collect_la_SOURCES = ygor/collect.c
@@ -123,3 +126,35 @@ test_salsa208_guacamole_CPPFLAGS =
 test_salsa208_guacamole_CPPFLAGS += $(AM_CPPFLAGS)
 test_salsa208_guacamole_CPPFLAGS += $(CPPFLAGS)
 test_salsa208_guacamole_LDADD = -lsodium
+
+##################################### Java #####################################
+
+ygor_jarfile = bindings/java/net.rescrv.ygor-$(VERSION).jar
+
+jardir = $(datadir)/java
+jar_DATA =
+if ENABLE_JAVA_BINDINGS
+lib_LTLIBRARIES += libygor-java.la
+jar_DATA += $(ygor_jarfile)
+endif
+
+CLEANFILES += $(ygor_jarfile)
+CLEANFILES += bindings/java/net/rescrv/ygor/*.class
+
+EXTRA_DIST += bindings/java/net/rescrv/ygor/DataLogger.java
+
+noinst_HEADERS += bindings/java/net_rescrv_ygor_DataLogger.h
+
+libygor_java_la_SOURCES = bindings/java/net_rescrv_ygor_DataLogger.c
+libygor_java_la_CPPFLAGS = $(JNI_CPPFLAGS) $(AM_CPPFLAGS) $(CPPFLAGS)
+libygor_java_la_CFLAGS = $(AM_CFLAGS) $(CFLAGS) -Wmissing-prototypes
+libygor_java_la_LIBADD = libygor.la
+
+JAVA_SRC_BASE=${abs_top_srcdir}/bindings/java
+JAVA_BUILD_BASE=${abs_top_builddir}/bindings/java
+JAVA_SRC_PKG=${JAVA_SRC_BASE}/net/rescrv/ygor
+JAVA_BUILD_PKG=${JAVA_BUILD_BASE}/net/rescrv/ygor
+
+$(ygor_jarfile): $(wildcard ${JAVA_SRC_PKG}/*.java)
+	javac -d ${JAVA_BUILD_BASE} ${JAVA_SRC_PKG}/*.java
+	cd ${JAVA_BUILD_BASE} && $(JAR) cvf $(JARFLAGS) ${abs_top_builddir}/${ygor_jarfile} net/rescrv/ygor/*.class

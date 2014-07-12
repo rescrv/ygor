@@ -51,7 +51,7 @@ import paramiko
 import ygor
 
 
-__all__ = ('Experiment', 'Host', 'HostSet', 'Parameter', 'Utility')
+__all__ = ('Experiment', 'Host', 'HostSet', 'Parameter', 'Environment', 'Utility')
 
 
 class Experiment(object):
@@ -82,6 +82,17 @@ class Experiment(object):
             if getattr(self, name) is p:
                 return name
         return None
+
+    def get_envvars(self):
+        envvars = []
+        for name in dir(self):
+            attr = getattr(self, name)
+            if not isinstance(attr, ygor.Environment):
+                continue
+            if name.upper() != name:
+                raise RuntimeError('Environment %s is not upper case' % name)
+            envvars.append(name.lower())
+        return sorted(envvars)
 
     def get_hosts(self):
         hosts = []
@@ -146,6 +157,32 @@ class Experiment(object):
             new_value = getattr(self, param.upper()).cast(value)
             setattr(self, param.upper(), Parameter(new_value))
 
+    def load_envvars_from_dict(self, d):
+        for param in self.get_envvars():
+            old_value = getattr(self, param.upper())
+            new_value = d.get(param, old_value)
+            if new_value is not old_value:
+                new_value = old_value.cast(new_value)
+                setattr(self, param.upper(), new_value)
+
+    def load_envvars_from_config(self, config):
+        for param in self.get_envvars():
+            old_value = getattr(self, param.upper())
+            new_value = config.get_envvar(param, old_value)
+            if new_value is not old_value:
+                new_value = old_value.cast(new_value)
+                setattr(self, param.upper(), new_value)
+
+    def load_envvars_from_cmdline(self, cmdline):
+        params = set(self.get_envvars())
+        for kv in cmdline:
+            param, value = kv.split('=', 1)
+            if param not in params:
+                raise RuntimeError('Command line environment variable %s not an '
+                                   'experimental environment variable')
+            new_value = getattr(self, param.upper()).cast(value)
+            setattr(self, param.upper(), Parameter(new_value))
+
     def load_hosts_from_config(self, config):
         for name in self.get_hosts():
             host = getattr(self, name.upper())
@@ -161,22 +198,37 @@ class Experiment(object):
 
 class Configuration(object):
 
-    def __init__(self, exp, config, cmdline):
+    def __init__(self, exp, config, pcmdline, ecmdline):
         self.cp = ConfigParser.RawConfigParser(allow_no_value=True)
         self.cp.read(config)
         exp.load_parameters_from_config(self)
-        exp.load_parameters_from_cmdline(cmdline)
+        exp.load_parameters_from_cmdline(pcmdline)
+        exp.load_envvars_from_config(self)
+        exp.load_envvars_from_cmdline(ecmdline)
         exp.load_hosts_from_config(self)
         exp.load_hostsets_from_config(self)
         if not self.cp.has_section('parameters'):
             self.cp.add_section('parameters')
+        if not self.cp.has_section('envvars'):
+            self.cp.add_section('envvars')
         for p in exp.get_parameters():
             v = getattr(exp, p.upper())
             self.cp.set('parameters', p, v)
+        for p in exp.get_envvars():
+            v = getattr(exp, p.upper())
+            self.cp.set('envvars', p, v)
 
     def get_parameter(self, param, old_value):
         try:
             return old_value.cast(self.cp.get('parameters', param))
+        except ConfigParser.NoSectionError as e:
+            return old_value
+        except ConfigParser.NoOptionError as e:
+            return old_value
+
+    def get_envvar(self, param, old_value):
+        try:
+            return old_value.cast(self.cp.get('envvars', param))
         except ConfigParser.NoSectionError as e:
             return old_value
         except ConfigParser.NoOptionError as e:
@@ -197,17 +249,20 @@ class Configuration(object):
 class SSH(object):
 
     HostMetaData = collections.namedtuple('HostMetaData',
-            ('location', 'workspace', 'path'))
+            ('location', 'workspace', 'profile'))
 
     class HostState(object):
 
-        def __init__(self, host, workspace, path, command):
+        def __init__(self, host, workspace, profile, command):
             self.location = host
             self.ssh = paramiko.SSHClient()
             self.ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             self.ssh.connect(host)
-            cmd  = 'cd %s && PATH=%s:$PATH ' % (pipes.quote(workspace),
-                                                pipes.quote(path))
+            if profile:
+                cmd  = 'cd %s && source %s && ' % (pipes.quote(workspace),
+                                                   pipes.quote(profile))
+            else:
+                cmd  = 'cd %s && ' % pipes.quote(workspace)
             cmd += command
             self.stdin, self.stdout, self.stderr = self.ssh.exec_command(cmd)
             self.out_stdout = ''
@@ -328,7 +383,7 @@ class Host(object):
         self.name = name
         self.location = None
         self.workspace = None
-        self.path = ''
+        self.profile = ''
 
     def load_from_config(self, config):
         opts = config.get_host_options(self.name)
@@ -337,23 +392,23 @@ class Host(object):
                 raise RuntimeError('Host %s missing option %s' % (self.name, o))
         self.location = opts['location']
         self.workspace = opts['workspace']
-        if 'path' in opts:
-            self.path = opts['path']
+        if 'profile' in opts:
+            self.profile = opts['profile']
 
     def run(self, command, status=0):
         command = ' '.join([quote(arg) for arg in command])
         print('run on', self.name + ':', command)
         host = SSH.HostMetaData(location=self.location,
                                 workspace=self.workspace,
-                                path=self.path)
+                                profile=self.profile)
         SSH.ssh([host], command, status)
 
     def collect(self, save_as, copy_from=None):
         copy_from = copy_from or save_as
         print('collect from', self.name + ':', copy_from, '->', save_as)
         SSH.scp(self.location,
-                os.path.join(self.workspace, copy_from),
-                os.path.join(self.exp.output, save_as))
+                os.profile.join(self.workspace, copy_from),
+                os.profile.join(self.exp.output, save_as))
 
 
 class HostSet(object):
@@ -368,6 +423,9 @@ class HostSet(object):
         self.name = name
         self.hosts = []
 
+    def __len__(self):
+        return len(self.hosts)
+
     def load_from_config(self, config):
         defaults = config.get_host_options(self.name)
         if 'number' not in defaults:
@@ -381,7 +439,7 @@ class HostSet(object):
                     raise RuntimeError('Host %s missing option %s' % (name, o))
             self.hosts.append(SSH.HostMetaData(location=opts['location'],
                                                workspace=opts['workspace'],
-                                               path=opts.get('path', '')))
+                                               profile=opts.get('profile', '')))
 
 
     def run(self, command, status=0):
@@ -446,14 +504,43 @@ class Parameter(object):
         return str(self.value)
 
     def as_int(self):
-        assert isinstance(self.value, int)
-        return self.value
+        if isinstance(self.value, Parameter):
+            value = self.value.value
+        else:
+            value = self.value
+        assert isinstance(value, int) or isinstance(value, long)
+        return value
 
     def cast(self, value):
         if isinstance(value, Parameter):
             value = value.value
         try:
             return Parameter(type(self.value)(value))
+        except ValueError as e:
+            raise RuntimeError(e)
+
+
+class Environment(object):
+
+    def __init__(self, value):
+        self.value = value
+
+    def __str__(self):
+        return str(self.value)
+
+    def as_int(self):
+        if isinstance(self.value, Parameter):
+            value = self.value.value
+        else:
+            value = self.value
+        assert isinstance(value, int) or isinstance(value, long)
+        return value
+
+    def cast(self, value):
+        if isinstance(value, Environment):
+            value = value.value
+        try:
+            return Environment(type(self.value)(value))
         except ValueError as e:
             raise RuntimeError(e)
 
@@ -479,16 +566,19 @@ def run(argv):
     parser.add_argument('-p', '--param', '--parameter',
                         default=[], dest='params', action='append',
                         help='Override parameters of the experiment')
+    parser.add_argument('-e', '--env',
+                        default=[], dest='envs', action='append',
+                        help='Override environment variables of the experiment')
     parser.add_argument('--name', default=None,
                         help='The name for this experiment')
     parser.add_argument('--overwrite', default=False, action='store_true',
                         help='Overwrite previous results')
     parser.add_argument('experiment', help='Class name for the experiment')
-    parser.add_argument('configuration', help='Configuration for experiment parameters')
+    parser.add_argument('configuration', help='Configuration for experiment')
     parser.add_argument('trials', nargs='+', help='A list of trials to run')
     args = parser.parse_args(argv)
     exp = get_experiment(args.experiment)
-    cfg = Configuration(exp, args.configuration, args.params)
+    cfg = Configuration(exp, args.configuration, args.params, args.envs)
     for trial_name in args.trials:
         if not hasattr(exp, trial_name):
             raise RuntimeError('Experiment has no trial %s' % trial_name)
@@ -519,22 +609,27 @@ def configure(argv):
     args = parser.parse_args(argv)
     exp = get_experiment(args.experiment)
     exp.get_parameters()
+    exp.get_envvars()
     cp = ConfigParser.RawConfigParser(allow_no_value=True)
     cp.add_section('parameters')
+    cp.add_section('envvars')
     for p in exp.get_parameters():
         v = getattr(exp, p.upper())
         cp.set('parameters', p, v)
+    for p in exp.get_envvars():
+        v = getattr(exp, p.upper())
+        cp.set('envvars', p, v)
     cp.add_section('hosts')
     for h in exp.get_hosts():
         cp.set('hosts', h + '.location', '<location>')
         cp.set('hosts', h + '.workspace', '<workspace>')
-        cp.set('hosts', h + '.path', '<path>')
+        cp.set('hosts', h + '.profile', '<profile>')
     for h in exp.get_hostsets():
         cp.set('hosts', h + '.number', '1')
         cp.set('hosts', h + '.location', '<default location>')
         cp.set('hosts', h + '.workspace', '<default workspace>')
-        cp.set('hosts', h + '.path', '<default path>')
+        cp.set('hosts', h + '.profile', '<default profile>')
         cp.set('hosts', h + '[0].location', '<location>')
         cp.set('hosts', h + '[0].workspace', '<workspace>')
-        cp.set('hosts', h + '[0].path', '<path>')
+        cp.set('hosts', h + '[0].profile', '<profile>')
     cp.write(sys.stdout)

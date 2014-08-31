@@ -851,6 +851,7 @@ armnod_generator :: armnod_generator(const armnod_config* config)
     }
 
     memset(m_buffer, 0, (m_lengths->max() + LENGTH_ROUNDUP) * sizeof(char));
+    m_guacamole->seek(1ULL << 63);
 }
 
 armnod_generator :: ~armnod_generator() throw ()

@@ -65,9 +65,10 @@ public class DataLogger
 
     public void record(long series, long data)
     {
-        record(series, System.nanoTime(), data);
+        record(series, this.time(), data);
     }
     public native void record(long series, long when, long data);
+    public native long time();
 
     /* cached IDs */
     private static native void initialize();

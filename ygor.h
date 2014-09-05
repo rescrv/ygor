@@ -252,7 +252,7 @@ uint64_t armnod_generate_idx_only(struct armnod_generator* ag);
 #ifdef __cplusplus
 } /* extern "C" */
 
-// e
+/* e */
 #include <e/popt.h>
 
 struct armnod_argparser
@@ -264,4 +264,4 @@ struct armnod_argparser
 };
 
 #endif /* __cplusplus */
-#endif // ygor_h_
+#endif /* ygor_h_ */

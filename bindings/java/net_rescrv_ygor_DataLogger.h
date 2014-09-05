@@ -17,6 +17,14 @@ JNIEXPORT void JNICALL Java_net_rescrv_ygor_DataLogger_record
 
 /*
  * Class:     net_rescrv_ygor_DataLogger
+ * Method:    time
+ * Signature: ()J
+ */
+JNIEXPORT jlong JNICALL Java_net_rescrv_ygor_DataLogger_time
+  (JNIEnv *, jobject);
+
+/*
+ * Class:     net_rescrv_ygor_DataLogger
  * Method:    initialize
  * Signature: ()V
  */

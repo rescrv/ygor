@@ -32,6 +32,7 @@
 
 /* POSIX */
 #include <errno.h>
+#include <time.h>
 
 /* Ygor */
 #include <ygor.h>
@@ -63,12 +64,14 @@ Java_net_rescrv_ygor_DataLogger_initialize(JNIEnv* env, jclass datalogger)
 
     CHECK_CACHE(_dl);
     CHECK_CACHE(_dl_ptr);
+    (void)datalogger;
 }
 
 JNIEXPORT YGOR_API void JNICALL
 Java_net_rescrv_ygor_DataLogger_terminate(JNIEnv* env, jclass datalogger)
 {
     (*env)->DeleteGlobalRef(env, _dl);
+    (void)datalogger;
 }
 
 /******************************* Pointer Unwrap *******************************/
@@ -103,7 +106,7 @@ Java_net_rescrv_ygor_DataLogger__1create(JNIEnv* env, jobject jdl, jstring jout,
 
     if (!ptr)
     {
-        // XXX
+        /* XXX */
         printf("poor man's exception:  could not open output: %s\n", strerror(errno));
         abort();
     }
@@ -129,7 +132,7 @@ Java_net_rescrv_ygor_DataLogger__1destroy(JNIEnv* env, jobject jdl)
     {
         if (ygor_data_logger_flush_and_destroy(ptr) < 0)
         {
-            // XXX
+            /* XXX */
             printf("poor man's exception:  could not flush output: %s\n", strerror(errno));
             abort();
         }
@@ -153,8 +156,25 @@ Java_net_rescrv_ygor_DataLogger_record(JNIEnv* env, jobject jdl, jlong series, j
 
     if (ygor_data_logger_record(ygor_get_ptr(env, jdl), &ydr) < 0)
     {
-        // XXX
+        /* XXX */
         printf("poor man's exception:  could not flush output: %s\n", strerror(errno));
         abort();
     }
+}
+
+JNIEXPORT YGOR_API jlong JNICALL
+Java_net_rescrv_ygor_DataLogger_time(JNIEnv* env, jobject jdl)
+{
+    uint64_t now;
+    struct timespec ts;
+
+    if (clock_gettime(CLOCK_REALTIME, &ts) < 0)
+    {
+        abort();
+    }
+
+    now =  ts.tv_sec * 1000000000ULL + ts.tv_nsec;
+    (void)env;
+    (void)jdl;
+    return (jlong)now;
 }

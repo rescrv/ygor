@@ -163,7 +163,7 @@ Java_net_rescrv_ygor_DataLogger_record(JNIEnv* env, jobject jdl, jlong series, j
 }
 
 JNIEXPORT YGOR_API jlong JNICALL
-Java_net_rescrv_ygor_DataLogger_time(JNIEnv* env, jobject jdl)
+Java_net_rescrv_ygor_DataLogger_time(JNIEnv* env, jclass jdl)
 {
     uint64_t now;
     struct timespec ts;

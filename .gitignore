@@ -19,6 +19,7 @@
 /bin/ygor-summarize
 /bin/ygor-timeseries
 /bin/ygor-t-test
+/compile
 /config.guess
 /config.h
 /config.h.in
@@ -36,6 +37,7 @@
 /Makefile.in
 /missing
 /stamp-h1
+/test-driver
 /test-salsa208-guacamole
 /ygor/collect.c
 /ygor/collect.so

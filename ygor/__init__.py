@@ -249,20 +249,20 @@ class Configuration(object):
 class SSH(object):
 
     HostMetaData = collections.namedtuple('HostMetaData',
-            ('location', 'workspace', 'profile'))
+            ('location', 'username', 'workspace', 'profile'))
 
     class HostState(object):
 
-        def __init__(self, host, workspace, profile, command):
-            self.location = host
+        def __init__(self, metadata, command):
+            self.location = metadata.location
             self.ssh = paramiko.SSHClient()
             self.ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            self.ssh.connect(host)
-            if profile:
-                cmd  = 'cd %s && source %s && ' % (pipes.quote(workspace),
-                                                   pipes.quote(profile))
+            self.ssh.connect(metadata.location, username=metadata.username)
+            if metadata.profile:
+                cmd  = 'cd %s && source %s && ' % (pipes.quote(metadata.workspace),
+                                                   pipes.quote(metadata.profile))
             else:
-                cmd  = 'cd %s && ' % pipes.quote(workspace)
+                cmd  = 'cd %s && ' % pipes.quote(metadata.workspace)
             cmd += command
             self.stdin, self.stdout, self.stderr = self.ssh.exec_command(cmd)
             self.out_stdout = ''
@@ -306,7 +306,7 @@ class SSH(object):
 
     @classmethod
     def ssh(cls, hosts, command, status):
-        states = [SSH.HostState(h, w, p, command) for h, w, p in hosts]
+        states = [SSH.HostState(h, command) for h in hosts]
         return cls.ssh_wait(states, command, status)
 
     @classmethod
@@ -340,13 +340,13 @@ class SSH(object):
             host.close()
 
     @classmethod
-    def scp(cls, host, src, dst):
+    def scp(cls, host, username, src, dst):
         ssh = None
         sftp = None
         try:
             ssh = paramiko.SSHClient()
             ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            ssh.connect(host)
+            ssh.connect(host, username=username)
             sftp = paramiko.SFTPClient.from_transport(ssh.get_transport())
             sftp.get(src, dst)
         except IOError as e:
@@ -382,6 +382,7 @@ class Host(object):
         self.exp = None
         self.name = name
         self.location = None
+        self.username = None
         self.workspace = None
         self.profile = ''
 
@@ -392,6 +393,8 @@ class Host(object):
                 raise RuntimeError('Host %s missing option %s' % (self.name, o))
         self.location = opts['location']
         self.workspace = opts['workspace']
+        if 'username' in opts:
+            self.username = opts['username']
         if 'profile' in opts:
             self.profile = opts['profile']
 
@@ -399,6 +402,7 @@ class Host(object):
         command = ' '.join([quote(arg) for arg in command])
         print('run on', self.name + ':', command)
         host = SSH.HostMetaData(location=self.location,
+                                username=self.username,
                                 workspace=self.workspace,
                                 profile=self.profile)
         SSH.ssh([host], command, status)
@@ -406,7 +410,7 @@ class Host(object):
     def collect(self, save_as, copy_from=None):
         copy_from = copy_from or save_as
         print('collect from', self.name + ':', copy_from, '->', save_as)
-        SSH.scp(self.location,
+        SSH.scp(self.location, self.username,
                 os.profile.join(self.workspace, copy_from),
                 os.profile.join(self.exp.output, save_as))
 
@@ -438,6 +442,7 @@ class HostSet(object):
                 if o not in opts.keys():
                     raise RuntimeError('Host %s missing option %s' % (name, o))
             self.hosts.append(SSH.HostMetaData(location=opts['location'],
+                                               username=opts.get('username', None),
                                                workspace=opts['workspace'],
                                                profile=opts.get('profile', '')))
 
@@ -472,7 +477,7 @@ class HostSet(object):
             commandp = [self.deindex(idx, a) for a in command]
             commandp = ' '.join([quote(arg) for arg in commandp])
             h = self.hosts[idx % len(self.hosts)]
-            states.append(SSH.HostState(h[0], h[1], h[2], commandp))
+            states.append(SSH.HostState(h, commandp))
         SSH.ssh_wait(states, command, status)
 
     def collect(self, output, source, merge=None, number=None):
@@ -487,7 +492,7 @@ class HostSet(object):
             host = self.hosts[idx % len(self.hosts)]
             src = os.path.join(host.workspace, self.deindex(idx, source))
             dst = os.path.join(tmp, '{0}-{1}'.format(idx, output))
-            SSH.scp(host.location, src, dst)
+            SSH.scp(host.location, host.username, src, dst)
             dsts.append(dst)
         if merge is None:
             merge = ['ygor', 'merge', '--output']

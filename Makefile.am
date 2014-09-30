@@ -81,7 +81,7 @@ bin_ygor_t_test_SOURCES = ygor-t-test.cc
 bin_ygor_t_test_LDADD = libygor.la
 
 include_HEADERS = ygor.h
-noinst_HEADERS = ygor-internal.h guacamole.h
+noinst_HEADERS = ygor-internal.h guacamole.h visibility.h
 
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = ygor.pc

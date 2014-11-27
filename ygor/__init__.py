@@ -446,7 +446,6 @@ class HostSet(object):
                                                workspace=opts['workspace'],
                                                profile=opts.get('profile', '')))
 
-
     def run(self, command, status=0):
         command = ' '.join([quote(arg) for arg in command])
         print('run on', self.name + ':', command)
@@ -457,7 +456,7 @@ class HostSet(object):
             return arg.func(i)
         return arg
 
-    def run_many(self, command, status=0, number=None):
+    def run_many(self, command, status=0, number=None, cond=None):
         if number is None:
             number = len(self.hosts)
         assert self.exp
@@ -474,6 +473,8 @@ class HostSet(object):
         print('run on', self.name + ':', ' '.join(pretty))
         states = []
         for idx in range(number):
+            if cond is not None and not cond(idx):
+                continue
             commandp = [self.deindex(idx, a) for a in command]
             commandp = ' '.join([quote(arg) for arg in commandp])
             h = self.hosts[idx % len(self.hosts)]

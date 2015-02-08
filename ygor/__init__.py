@@ -411,8 +411,8 @@ class Host(object):
         copy_from = copy_from or save_as
         print('collect from', self.name + ':', copy_from, '->', save_as)
         SSH.scp(self.location, self.username,
-                os.profile.join(self.workspace, copy_from),
-                os.profile.join(self.exp.output, save_as))
+                os.path.join(self.workspace, copy_from),
+                os.path.join(self.exp.output, save_as))
 
 
 class HostSet(object):

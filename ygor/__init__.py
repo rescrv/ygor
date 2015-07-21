@@ -258,42 +258,33 @@ class SSH(object):
             self.ssh = paramiko.SSHClient()
             self.ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             self.ssh.connect(metadata.location, username=metadata.username)
+            self.transport = self.ssh.get_transport()
+            self.channel = self.transport.open_session()
             if metadata.profile:
-                cmd  = 'cd %s && source %s && ' % (pipes.quote(metadata.workspace),
+                cmd  = 'read -n1 && cd %s && source %s && ' % (pipes.quote(metadata.workspace),
                                                    pipes.quote(metadata.profile))
             else:
-                cmd  = 'cd %s && ' % pipes.quote(metadata.workspace)
+                cmd  = 'read -n1 && cd %s && ' % pipes.quote(metadata.workspace)
             cmd += command
-            self.stdin, self.stdout, self.stderr = self.ssh.exec_command(cmd)
+            self.channel.exec_command(cmd)
             self.out_stdout = ''
             self.out_stderr = ''
             self.exit_status = None
 
-        @property
-        def fileno(self):
-            if isinstance(self.stdout.channel.fileno, int):
-                return self.stdout.channel.fileno
-            return -1
-
         def recv(self):
-            while self.nonblocking_recv():
-                pass
-
-        def nonblocking_recv(self):
-            if self.stdout.channel.recv_ready():
-                self.out_stdout += self.stdout.channel.recv(1024)
-                return True
-            elif self.stdout.channel.recv_stderr_ready():
-                self.out_stderr += self.stdout.channel.recv_stderr(1024)
-                return True
-            elif self.stdout.channel.exit_status_ready():
-                self.exit_status = self.stdout.channel.recv_exit_status()
-            return False
+            did_something = True
+            while did_something:
+                did_something = False
+                if self.channel.recv_ready():
+                    self.out_stdout += self.channel.recv(1024).decode('ascii', 'ignore')
+                    did_something = True
+                elif self.channel.recv_stderr_ready():
+                    self.out_stderr += self.channel.recv_stderr(1024).decode('ascii', 'ignore')
+                    did_something = True
+                elif self.channel.exit_status_ready():
+                    self.exit_status = self.channel.exit_status
 
         def close(self):
-            self.stdin.close()
-            self.stdout.close()
-            self.stderr.close()
             self.ssh.close()
 
     @classmethod
@@ -311,24 +302,23 @@ class SSH(object):
 
     @classmethod
     def ssh_wait(cls, states, command, status):
+        channels = set([])
+        fd2chan = {}
         poll = select.poll()
-        while any([h.exit_status is None for h in states]):
-            fd2obj = {}
-            for h in states:
-                h.nonblocking_recv()
-                if h.exit_status is None and h.fileno >= 0:
-                    poll.register(h.fileno, select.POLLIN | select.POLLHUP | select.POLLERR)
-                    fd2obj[h.fileno] = h
-                if h.exit_status is not None:
-                    try:
-                        poll.unregister(h.fileno)
-                    except KeyError:
-                        pass
-                    except ValueError:
-                        pass
-            for fd, event in poll.poll(1.0):
-                print(fd, fd2obj)
-                fd2obj[fd].recv()
+        for s in states:
+            fd2chan[s.channel.fileno()] = s
+            channels.add(s)
+            poll.register(s.channel, select.POLLIN | select.POLLHUP | select.POLLERR)
+        for s in states:
+            s.channel.send('x')
+        while channels:
+            for x, ev in poll.poll(1.0):
+                x = fd2chan[x]
+                x.recv()
+                if x.exit_status is not None:
+                    x.close()
+                    poll.unregister(x.channel)
+                    channels.remove(x)
         for host in states:
             cls._output(host.location, 'stdout', host.out_stdout)
             cls._output(host.location, 'stderr', host.out_stderr)

@@ -28,6 +28,9 @@
 // C
 #include <cstdlib>
 
+// POSIX
+#include <errno.h>
+
 // e
 #include <e/popt.h>
 

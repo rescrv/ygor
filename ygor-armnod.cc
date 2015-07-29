@@ -27,6 +27,7 @@
 
 // C
 #include <signal.h>
+#include <stdlib.h>
 
 // STL
 #include <memory>

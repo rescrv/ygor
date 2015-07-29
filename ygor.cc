@@ -35,6 +35,7 @@
 
 // POSIX
 #include <dirent.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -988,13 +989,9 @@ ygor_data_logger_record_rusage_stats(struct ygor_data_logger* ydl, uint64_t when
 YGOR_API int
 ygor_io_block_stat_path(const char* _path, char* stat_path, size_t stat_path_sz)
 {
-    po6::pathname path;
+    std::string path(_path);
 
-    try
-    {
-        path = po6::pathname(_path).realpath();
-    }
-    catch (po6::error& e)
+    if (!po6::path::realpath(path, &path))
     {
         return -1;
     }
@@ -1067,7 +1064,7 @@ ygor_io_block_stat_path(const char* _path, char* stat_path, size_t stat_path_sz)
 
         size_t msz = strlen(mnt);
 
-        if (strncmp(mnt, path.get(), msz) != 0 ||
+        if (strncmp(mnt, path.c_str(), msz) != 0 ||
             msz < max_mnt_sz)
         {
             continue;
@@ -1075,13 +1072,13 @@ ygor_io_block_stat_path(const char* _path, char* stat_path, size_t stat_path_sz)
 
         std::string dev_path;
 
-        try
+        if (po6::path::realpath(dev, &dev_path))
         {
-            dev_path = po6::pathname(dev).realpath().basename().get();
+            dev_path = po6::path::basename(dev_path);
         }
-        catch (po6::error& e)
+        else
         {
-            dev_path = po6::pathname(dev).basename().get();
+            dev_path = po6::path::basename(dev);
         }
 
         for (size_t i = 0; i < block_devs.size(); ++i)
@@ -1357,6 +1354,7 @@ ygor_summarize(const char* input, struct ygor_summary* summary)
 
         start = std::min(start, dr.when);
         end = std::max(end, dr.when);
+        end = std::max(end, dr.when + dr.data);
         ++n;
         double delta = dr.data - mean;
         mean = mean + delta / n;

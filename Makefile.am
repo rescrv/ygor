@@ -44,6 +44,7 @@ EXTRA_DIST += ygor/graph.py
 bin_PROGRAMS = bin/ygor
 bin_ygor_SOURCES = ygor-cli.cc
 bin_ygor_CPPFLAGS = -DYGOR_EXEC_DIR=\""$(ygorexecdir)\"" $(AM_CPPFLAGS) $(CPPFLAGS)
+bin_ygor_LDADD = $(E_LIBS)
 
 ygorexecdir = $(libexecdir)/$(PACKAGE)-$(VERSION)
 ygorexec_SCRIPTS  =

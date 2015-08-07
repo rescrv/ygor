@@ -159,7 +159,7 @@ random_bits_for(uint64_t range)
 {
     unsigned bits = 0;
 
-    while (1U << bits < range)
+    while (bits < 64 && (1ULL << bits) < range)
     {
         ++bits;
     }

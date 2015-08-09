@@ -44,7 +44,7 @@ EXTRA_DIST += ygor/graph.py
 bin_PROGRAMS = bin/ygor
 bin_ygor_SOURCES = ygor-cli.cc
 bin_ygor_CPPFLAGS = -DYGOR_EXEC_DIR=\""$(ygorexecdir)\"" $(AM_CPPFLAGS) $(CPPFLAGS)
-bin_ygor_LDADD = $(E_LIBS)
+bin_ygor_LDADD = $(E_LIBS) $(PO6_LIBS)
 
 ygorexecdir = $(libexecdir)/$(PACKAGE)-$(VERSION)
 ygorexec_SCRIPTS  =
@@ -61,25 +61,25 @@ ygorexec_PROGRAMS += bin/ygor-timeseries
 ygorexec_PROGRAMS += bin/ygor-t-test
 
 bin_ygor_armnod_SOURCES = ygor-armnod.cc
-bin_ygor_armnod_LDADD = libygor.la
+bin_ygor_armnod_LDADD = libygor.la $(PO6_LIBS)
 
 bin_ygor_cdf_SOURCES = ygor-cdf.cc
-bin_ygor_cdf_LDADD = libygor.la
+bin_ygor_cdf_LDADD = libygor.la $(PO6_LIBS)
 
 bin_ygor_dump_SOURCES = ygor-dump.cc
-bin_ygor_dump_LDADD = libygor.la
+bin_ygor_dump_LDADD = libygor.la $(PO6_LIBS)
 
 bin_ygor_merge_SOURCES = ygor-merge.cc
-bin_ygor_merge_LDADD = libygor.la
+bin_ygor_merge_LDADD = libygor.la $(PO6_LIBS)
 
 bin_ygor_summarize_SOURCES = ygor-summarize.cc
-bin_ygor_summarize_LDADD = libygor.la
+bin_ygor_summarize_LDADD = libygor.la $(PO6_LIBS)
 
 bin_ygor_timeseries_SOURCES = ygor-timeseries.cc
-bin_ygor_timeseries_LDADD = libygor.la
+bin_ygor_timeseries_LDADD = libygor.la $(PO6_LIBS)
 
 bin_ygor_t_test_SOURCES = ygor-t-test.cc
-bin_ygor_t_test_LDADD = libygor.la
+bin_ygor_t_test_LDADD = libygor.la $(PO6_LIBS)
 
 include_HEADERS = ygor.h
 noinst_HEADERS = ygor-internal.h guacamole.h visibility.h
@@ -90,7 +90,7 @@ pkgconfig_DATA = ygor.pc
 lib_LTLIBRARIES = libygor.la
 
 libygor_la_SOURCES = ygor.cc armnod.cc guacamole.cc
-libygor_la_LIBADD = $(E_LIBS)
+libygor_la_LIBADD = $(E_LIBS) $(PO6_LIBS)
 
 pkgpyexecdir = $(pyexecdir)/ygor
 pkgpyexec_DATA =

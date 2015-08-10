@@ -126,7 +126,7 @@ test_salsa208_guacamole_SOURCES = test-salsa208-guacamole.cc guacamole.cc
 test_salsa208_guacamole_CPPFLAGS =
 test_salsa208_guacamole_CPPFLAGS += $(AM_CPPFLAGS)
 test_salsa208_guacamole_CPPFLAGS += $(CPPFLAGS)
-test_salsa208_guacamole_LDADD = -lsodium
+test_salsa208_guacamole_LDADD = $(E_LIBS) -lsodium
 
 ##################################### Java #####################################
 

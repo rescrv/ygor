@@ -153,7 +153,7 @@ class Experiment(object):
             param, value = kv.split('=', 1)
             if param not in params:
                 raise RuntimeError('Command line parameter %s not an '
-                                   'experimental parameter')
+                                   'experimental parameter' % param)
             new_value = getattr(self, param.upper()).cast(value)
             setattr(self, param.upper(), Parameter(new_value))
 

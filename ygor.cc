@@ -50,6 +50,7 @@
 
 // po6
 #include <po6/threads/mutex.h>
+#include <po6/time.h>
 
 // e
 #include <e/varint.h>
@@ -60,18 +61,6 @@
 
 namespace
 {
-
-uint64_t
-realtime()
-{
-    timespec ts;
-    int success = clock_gettime(CLOCK_REALTIME, &ts);
-    assert(success >= 0);
-    uint64_t ret = ts.tv_sec;
-    ret *= 1000000000;
-    ret += ts.tv_nsec;
-    return ret;
-}
 
 size_t
 roundup(size_t x, size_t y)
@@ -757,7 +746,7 @@ ygor_data_logger_flush_and_destroy(struct ygor_data_logger* dl)
 YGOR_API int
 ygor_data_logger_start(struct ygor_data_logger*, struct ygor_data_record* dr)
 {
-    dr->when = realtime();
+    dr->when = po6::wallclock_time();
     dr->data = dr->when;
     return 0;
 }
@@ -765,7 +754,7 @@ ygor_data_logger_start(struct ygor_data_logger*, struct ygor_data_record* dr)
 YGOR_API int
 ygor_data_logger_finish(struct ygor_data_logger*, struct ygor_data_record* dr)
 {
-    dr->data = realtime() - dr->data;
+    dr->data = po6::wallclock_time() - dr->data;
     return 0;
 }
 

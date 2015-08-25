@@ -161,22 +161,6 @@ guacamole_prng :: mash()
 namespace
 {
 
-double
-mean(uint64_t _min, uint64_t _max)
-{
-    double min = static_cast<double>(_min);
-    double max = static_cast<double>(_max);
-    return min + (max - min) / 2;
-}
-
-double
-sigma(uint64_t _min, uint64_t _max)
-{
-    double min = static_cast<double>(_min);
-    double max = static_cast<double>(_max);
-    return (max - min) / 6;
-}
-
 unsigned
 random_bits_for(uint64_t range)
 {

@@ -74,17 +74,21 @@ struct guacamole_prng
         void mash();
 
         uint64_t m_nonce;
-        uint64_t m_next;
-        unsigned m_next_bits;
         unsigned m_buffer_idx;
-        uint32_t m_buffer[16];
+        uint64_t m_leftovers;
+        unsigned m_bits_leftover;
+        union {
+            uint32_t b32[16];
+            uint64_t b64[8];
+        } m_buffer;
 };
 
 guacamole_prng :: guacamole_prng()
-    : m_nonce()
-    , m_next()
-    , m_next_bits()
-    , m_buffer_idx()
+    : m_nonce(0)
+    , m_buffer_idx(0)
+    , m_leftovers(0)
+    , m_bits_leftover(0)
+    , m_buffer()
 {
     seek(0);
 }
@@ -92,25 +96,42 @@ guacamole_prng :: guacamole_prng()
 uint64_t
 guacamole_prng :: generate(unsigned bits)
 {
-    assert(bits <= 32);
+    assert(bits <= 64);
+    assert(m_buffer_idx < 8);
+    assert(m_bits_leftover > 0);
+    const unsigned first_consume = std::min(m_bits_leftover, bits);
+    const uint64_t first_mask = (1ULL << first_consume) - 1ULL;
+    uint64_t ret = m_leftovers & first_mask;
+    bits -= first_consume;
+    m_leftovers >>= first_consume;
+    m_bits_leftover -= first_consume;
+    assert(bits == 0 || m_bits_leftover == 0);
 
-    if (m_buffer_idx == 16)
+    if (m_bits_leftover == 0)
     {
-        mash();
-        assert(m_buffer_idx == 0);
-    }
-
-    if (m_next_bits < bits)
-    {
-        uint64_t x = m_buffer[m_buffer_idx];
-        m_next |= x << m_next_bits;
-        m_next_bits += 32;
         ++m_buffer_idx;
+
+        if (m_buffer_idx >= 8)
+        {
+            mash();
+            assert(m_buffer_idx == 0);
+        }
+
+        m_leftovers = m_buffer.b64[m_buffer_idx];
+        m_bits_leftover = 64;
     }
 
-    uint64_t ret = ((1ULL << bits) - 1) & m_next;
-    m_next >>= bits;
-    m_next_bits -= bits;
+    if (bits > 0)
+    {
+        const unsigned second_consume = bits;
+        const uint64_t second_mask = (1ULL << second_consume) - 1ULL;
+        ret |= (m_leftovers & second_mask) << first_mask;
+        m_leftovers >>= second_consume;
+        m_bits_leftover -= second_consume;
+    }
+
+    assert(m_buffer_idx < 8);
+    assert(m_bits_leftover > 0);
     return ret;
 }
 
@@ -118,17 +139,19 @@ void
 guacamole_prng :: seek(uint64_t idx)
 {
     m_nonce = idx;
-    m_next = 0;
-    m_next_bits = 0;
-    m_buffer_idx = 16;
+    m_buffer_idx = 8;
+    m_leftovers = 0;
+    m_bits_leftover = 0;
     mash();
+    m_leftovers = m_buffer.b64[m_buffer_idx];
+    m_bits_leftover = 64;
 }
 
 void
 guacamole_prng :: mash()
 {
-    assert(m_buffer_idx == 16);
-    guacamole(m_nonce, m_buffer);
+    assert(m_buffer_idx == 8);
+    guacamole(m_nonce, m_buffer.b32);
     m_buffer_idx = 0;
     ++m_nonce;
 }

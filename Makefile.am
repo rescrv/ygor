@@ -54,6 +54,7 @@ ygorexec_SCRIPTS += bin/ygor-graph
 ygorexec_PROGRAMS  =
 ygorexec_PROGRAMS += bin/ygor-armnod
 ygorexec_PROGRAMS += bin/ygor-cdf
+ygorexec_PROGRAMS += bin/ygor-percentiles
 ygorexec_PROGRAMS += bin/ygor-dump
 ygorexec_PROGRAMS += bin/ygor-merge
 ygorexec_PROGRAMS += bin/ygor-summarize
@@ -65,6 +66,9 @@ bin_ygor_armnod_LDADD = libygor.la $(PO6_LIBS)
 
 bin_ygor_cdf_SOURCES = ygor-cdf.cc
 bin_ygor_cdf_LDADD = libygor.la $(PO6_LIBS)
+
+bin_ygor_percentiles_SOURCES = ygor-percentiles.cc
+bin_ygor_percentiles_LDADD = libygor.la $(PO6_LIBS)
 
 bin_ygor_dump_SOURCES = ygor-dump.cc
 bin_ygor_dump_LDADD = libygor.la $(PO6_LIBS)

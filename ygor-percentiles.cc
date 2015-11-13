@@ -25,35 +25,82 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-#ifdef HAVE_CONFIG_H
-#include "config.h"
-#endif
-
-// STL
-#include <vector>
+// C
+#include <cstdlib>
+#include <stdint.h>
 
 // e
-#include <e/subcommand.h>
+#include <e/popt.h>
+
+// Ygor
+#include "ygor.h"
+#include "ygor-internal.h"
 
 int
 main(int argc, const char* argv[])
 {
-    std::vector<e::subcommand> cmds;
-    cmds.push_back(e::subcommand("armnod",      "Generate random strings"));
-    cmds.push_back(e::subcommand("configure",   "Configure an experiment for Ygor"));
-    cmds.push_back(e::subcommand("run",         "Have Ygor run an experiment"));
-    cmds.push_back(e::subcommand("cdf",         "Generate a CDF of the data"));
-    cmds.push_back(e::subcommand("percentiles", "Compute percentile values for data"));
-    cmds.push_back(e::subcommand("dump",        "Dump the raw data"));
-    cmds.push_back(e::subcommand("merge",       "Merge multiple data files"));
-    cmds.push_back(e::subcommand("summarize",   "Generate a summary of the data"));
-    cmds.push_back(e::subcommand("timeseries",  "Generate a timeseries of the data"));
-    cmds.push_back(e::subcommand("t-test",      "Run the Student's t-test on multiple data files"));
-    cmds.push_back(e::subcommand("graph",       "Graph gnuplot files with Jinaj2 preprocessing"));
-    return dispatch_to_subcommands(argc, argv,
-                                   "ygor", "ygor",
-                                   PACKAGE_VERSION,
-                                   "ygor-",
-                                   "YGOR_EXEC_PATH", YGOR_EXEC_DIR,
-                                   &cmds.front(), cmds.size());
+    e::argparser ap;
+    ap.autohelp();
+    ap.option_string("<input file> [<input file> ...]");
+    bucket_scale_opts bso;
+    ap.add("Units:", bso.parser());
+
+    if (!ap.parse(argc, argv))
+    {
+        return EXIT_FAILURE;
+    }
+
+    if (!bso.validate())
+    {
+        return EXIT_FAILURE;
+    }
+
+    if (ap.args_sz() < 1)
+    {
+        fprintf(stderr, "specify at least one input file\n");
+        return EXIT_FAILURE;
+    }
+
+    ygor_data_point* data = NULL;
+    size_t data_sz = 0;
+
+    if (ygor_cdf(ap.args()[0], bso.bucket(), &data, &data_sz) < 0)
+    {
+        fprintf(stderr, "cannot read from input %s\n", ap.args()[0]);
+        return EXIT_FAILURE;
+    }
+
+    for (size_t i = 1; i < ap.args_sz(); ++i)
+    {
+        if (i > 1)
+        {
+            fprintf(stdout, " ");
+        }
+
+        char* end = NULL;
+        uint64_t percentile = strtol(ap.args()[i], &end, 10);
+
+        if (!end || *end != '\0' || percentile > 100)
+        {
+            fprintf(stderr, "percentile must be in range [0:100]\n");
+            return EXIT_FAILURE;
+
+        }
+
+        for (size_t idx = 0; idx < data_sz; ++idx)
+        {
+            if (data[idx].y >= percentile)
+            {
+                fprintf(stdout, "%ld", bso.index_scaled(idx));
+                break;
+            }
+        }
+    }
+
+    if (ap.args_sz() > 1)
+    {
+        fprintf(stdout, "\n");
+    }
+
+    return EXIT_SUCCESS;
 }

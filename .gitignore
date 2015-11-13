@@ -16,6 +16,7 @@
 /bin/ygor-cdf
 /bin/ygor-dump
 /bin/ygor-merge
+/bin/ygor-percentiles
 /bin/ygor-summarize
 /bin/ygor-timeseries
 /bin/ygor-t-test

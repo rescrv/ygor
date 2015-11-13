@@ -99,6 +99,7 @@ guacamole_prng :: generate(unsigned bits)
     assert(bits <= 64);
     assert(m_buffer_idx < 8);
     assert(m_bits_leftover > 0);
+    const unsigned original_bits = bits;
     const unsigned first_consume = std::min(m_bits_leftover, bits);
     const uint64_t first_mask = (1ULL << first_consume) - 1ULL;
     uint64_t ret = m_leftovers & first_mask;
@@ -125,13 +126,14 @@ guacamole_prng :: generate(unsigned bits)
     {
         const unsigned second_consume = bits;
         const uint64_t second_mask = (1ULL << second_consume) - 1ULL;
-        ret |= (m_leftovers & second_mask) << first_mask;
+        ret |= (m_leftovers & second_mask) << first_consume;
         m_leftovers >>= second_consume;
         m_bits_leftover -= second_consume;
     }
 
     assert(m_buffer_idx < 8);
     assert(m_bits_leftover > 0);
+    assert(ret == (ret & ((1ULL << original_bits) - 1)));
     return ret;
 }
 
@@ -175,7 +177,7 @@ random_bits_for(uint64_t range)
 }
 
 double
-scale_random_bits(unsigned bits, unsigned range)
+scale_random_bits(unsigned bits, uint64_t range)
 {
     double scale = range;
     scale = scale / (1ULL << bits);

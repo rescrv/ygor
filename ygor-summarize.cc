@@ -88,13 +88,12 @@ main(int argc, const char* argv[])
             return EXIT_FAILURE;
         }
 
-        fprintf(stdout, "%-*s n=%ld time=%lu%s throughput=%g mean=%g%s stdev=%g%s variance=%g%s\n",
+        fprintf(stdout, "%-*s n=%ld time=%lu%s throughput=%g mean=%g%s stdev=%g%s\n",
                         int(input_sz), ap.args()[i], summs[i].points,
                         summs[i].nanos / scale, scale_str,
                         (summs[i].points * 1000ULL * 1000ULL * 1000.)/ summs[i].nanos,
                         summs[i].mean / scale, scale_str,
-                        summs[i].stdev / scale, scale_str,
-                        summs[i].variance / scale, scale_str);
+                        summs[i].stdev / scale, scale_str);
     }
 
     return EXIT_SUCCESS;

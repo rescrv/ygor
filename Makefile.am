@@ -56,6 +56,7 @@ ygorexec_PROGRAMS += bin/ygor-armnod
 ygorexec_PROGRAMS += bin/ygor-cdf
 ygorexec_PROGRAMS += bin/ygor-percentiles
 ygorexec_PROGRAMS += bin/ygor-dump
+ygorexec_PROGRAMS += bin/ygor-guacamole
 ygorexec_PROGRAMS += bin/ygor-merge
 ygorexec_PROGRAMS += bin/ygor-summarize
 ygorexec_PROGRAMS += bin/ygor-timeseries
@@ -72,6 +73,9 @@ bin_ygor_percentiles_LDADD = libygor.la $(PO6_LIBS)
 
 bin_ygor_dump_SOURCES = ygor-dump.cc
 bin_ygor_dump_LDADD = libygor.la $(PO6_LIBS)
+
+bin_ygor_guacamole_SOURCES = ygor-guacamole.cc
+bin_ygor_guacamole_LDADD = libygor.la $(PO6_LIBS)
 
 bin_ygor_merge_SOURCES = ygor-merge.cc
 bin_ygor_merge_LDADD = libygor.la $(PO6_LIBS)

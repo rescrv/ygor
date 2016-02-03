@@ -1,4 +1,4 @@
-// Copyright (c) 2014, Robert Escriva
+// Copyright (c) 2016, Robert Escriva
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -9,8 +9,8 @@
 //     * Redistributions in binary form must reproduce the above copyright
 //       notice, this list of conditions and the following disclaimer in the
 //       documentation and/or other materials provided with the distribution.
-//     * Neither the name of Ygor nor the names of its contributors may be used
-//       to endorse or promote products derived from this software without
+//     * Neither the name of Ygor nor the names of its contributors may be
+//       used to endorse or promote products derived from this software without
 //       specific prior written permission.
 //
 // THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
@@ -25,13 +25,44 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-#ifndef ygor_guacamole_
-#define ygor_guacamole_
-
 // C
-#include <stdint.h>
+#include <stdlib.h>
 
-void
-guacamole_mash(uint64_t number, uint32_t output[16]);
+// POSIX
+#include <unistd.h>
 
-#endif // ygor_guacamole_
+// e
+#include <e/popt.h>
+
+// ygor
+#include "ygor.h"
+
+int
+main(int argc, const char* argv[])
+{
+    guacamole* g = NULL;
+
+    if (argc > 1)
+    {
+        uint64_t x = strtoull(argv[1], NULL, 10);
+        g = guacamole_create(x);
+    }
+    else
+    {
+        g = guacamole_create(0);
+    }
+    
+    char buf[4096];
+
+    while (true)
+    {
+        guacamole_generate(g, buf, 4096);
+
+        if (write(STDOUT_FILENO, buf, 4096) < 0)
+        {
+            return EXIT_FAILURE;
+        }
+    }
+
+    return EXIT_SUCCESS;
+}

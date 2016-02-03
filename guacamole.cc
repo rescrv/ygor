@@ -19,7 +19,7 @@ static uint32_t rotate(uint32_t u,int c)
 }
 
 void
-guacamole(uint64_t number, uint32_t output[16])
+guacamole_mash(uint64_t number, uint32_t output[16])
 {
     uint32_t x0, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15;
     uint32_t j0, j1, j2, j3, j4, j5, j6, j7, j8, j9, j10, j11, j12, j13, j14, j15;

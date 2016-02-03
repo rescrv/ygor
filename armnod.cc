@@ -153,7 +153,7 @@ void
 guacamole_prng :: mash()
 {
     assert(m_buffer_idx == 8);
-    guacamole(m_nonce, m_buffer.b32);
+    guacamole_mash(m_nonce, m_buffer.b32);
     m_buffer_idx = 0;
     ++m_nonce;
 }
@@ -497,6 +497,50 @@ struct armnod_generator
 
 extern "C"
 {
+
+YGOR_API guacamole*
+guacamole_create(uint64_t seed)
+{
+    guacamole_prng* ptr = new (std::nothrow) guacamole_prng();
+    ptr->seek(seed);
+    return reinterpret_cast<guacamole*>(ptr);
+}
+
+YGOR_API void
+guacamole_destroy(guacamole* g)
+{
+    guacamole_prng* ptr = reinterpret_cast<guacamole_prng*>(g);
+
+    if (ptr)
+    {
+        delete ptr;
+    }
+}
+
+YGOR_API void
+guacamole_generate(guacamole* _g, void* _bytes, size_t bytes_sz)
+{
+    guacamole_prng* g = reinterpret_cast<guacamole_prng*>(_g);
+    unsigned char* bytes = static_cast<unsigned char*>(_bytes);
+
+    while (bytes_sz >= 8)
+    {
+        uint64_t x = g->generate(64);
+        e::pack64le(x, bytes);
+        bytes += 8;
+        bytes_sz -= 8;
+    }
+
+    uint64_t x = g->generate(bytes_sz * 8);
+
+    while (bytes_sz > 0)
+    {
+        bytes[0] = x & 255;
+        ++bytes;
+        --bytes_sz;
+        x >>= 8;
+    }
+}
 
 YGOR_API armnod_config*
 armnod_config_create()

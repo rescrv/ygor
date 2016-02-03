@@ -15,6 +15,7 @@
 /bin/ygor-armnod
 /bin/ygor-cdf
 /bin/ygor-dump
+/bin/ygor-guacamole
 /bin/ygor-merge
 /bin/ygor-percentiles
 /bin/ygor-summarize

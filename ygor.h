@@ -173,6 +173,12 @@ int ygor_t_test(struct ygor_summary* baseline,
                 double interval,
                 struct ygor_difference* diff);
 
+/* random bytes */
+struct guacamole;
+struct guacamole* guacamole_create(uint64_t seed);
+void guacamole_destroy(struct guacamole* g); /* who would ever want to destroy guacamole? devour? maybe */
+void guacamole_generate(struct guacamole* g, void* bytes, size_t bytes_sz);
+
 /* random strings */
 
 struct armnod_config;

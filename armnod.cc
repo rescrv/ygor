@@ -133,7 +133,7 @@ guacamole_prng :: generate(unsigned bits)
 
     assert(m_buffer_idx < 8);
     assert(m_bits_leftover > 0);
-    assert(ret == (ret & ((1ULL << original_bits) - 1)));
+    assert(original_bits == 64 || ret == (ret & ((1ULL << original_bits) - 1)));
     return ret;
 }
 

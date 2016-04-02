@@ -205,6 +205,13 @@ class Experiment(object):
             hostset.load_from_config(config)
             hostset.exp = self
 
+    def save_measurement(self, save_as, data):
+        print('saving measurement', save_as)
+        f = open(os.path.join(self.output, save_as), 'w')
+        f.write(data)
+        f.flush()
+        f.close()
+
 
 class Configuration(object):
 

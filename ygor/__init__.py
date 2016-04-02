@@ -123,12 +123,22 @@ class Experiment(object):
             params.append(p + '=' + str(x))
         return ','.join(params)
 
-    def get_output_dir(self, trial, name=None):
+    def get_output_dir(self, trial, name=None, iteration=None):
         path = self.get_path()
         ps = self.get_parameter_string()
         x = os.path.join(path, ps, trial)
         if name is not None:
             x += '-' + name
+        if iteration is not None:
+            if iteration == 'auto':
+                if not os.path.exists(x):
+                    return x
+                for idx in itertools.count(1):
+                    t = x + '~' + str(idx)
+                    if not os.path.exists(t):
+                        iteration = idx
+                        break
+            x += '~' + str(iteration)
         return x
 
     def load_parameters_from_dict(self, d):
@@ -567,6 +577,8 @@ def run(argv):
                         help='Override environment variables of the experiment')
     parser.add_argument('--name', default=None,
                         help='The name for this experiment')
+    parser.add_argument('--iteration', default=None,
+                        help='The iteration of this experiment')
     parser.add_argument('--overwrite', default=False, action='store_true',
                         help='Overwrite previous results')
     parser.add_argument('experiment', help='Class name for the experiment')
@@ -578,12 +590,12 @@ def run(argv):
     for trial_name in args.trials:
         if not hasattr(exp, trial_name):
             raise RuntimeError('Experiment has no trial %s' % trial_name)
-        path = exp.get_output_dir(trial_name, args.name)
+        path = exp.get_output_dir(trial_name, args.name, args.iteration)
         if os.path.exists(path) and not args.overwrite:
             raise RuntimeError('Experiment already run.  '
                                'To run, erase:\n' + path)
     for trial_name in args.trials:
-        path = exp.get_output_dir(trial_name, args.name)
+        path = exp.get_output_dir(trial_name, args.name, args.iteration)
         try:
             tmp = tempfile.mkdtemp(prefix='ygor-', dir='.')
             exp.output = tmp

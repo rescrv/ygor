@@ -90,7 +90,14 @@ fi
 PKG_CHECK_MODULES([PO6], [libpo6 >= 0.3.1])
 PKG_CHECK_MODULES([E], [libe >= 0.3.2])
 
-AC_PYTHON_DEVEL([>= '2.6'])
+AC_ARG_ENABLE([python_bindings], [AS_HELP_STRING([--enable-python-bindings],
+              [build Python bindings @<:@default: no@:>@])],
+              [python_bindings=${enableval}], [python_bindings=no])
+if test x"${python_bindings}" = xyes; then
+    AC_PYTHON_DEVEL([>= '2.6'])
+    AS_CASE([$PYTHON_VERSION], [3*], [pythonsym=PyInit_], [2*], [pythonsym=init], [])
+    AC_SUBST([PYTHON_SYMBOL], [${pythonsym}])
+fi
 
 # Checks for header files.
 AC_CHECK_HEADER([popt.h],,[AC_MSG_ERROR([

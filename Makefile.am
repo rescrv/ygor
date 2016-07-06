@@ -102,9 +102,12 @@ libygor_la_LIBADD = $(E_LIBS) $(PO6_LIBS)
 
 pkgpyexecdir = $(pyexecdir)/ygor
 pkgpyexec_DATA =
+pkgpyexec_LTLIBRARIES =
+if ENABLE_PYTHON_BINDINGS
 pkgpyexec_DATA += ygor/__init__.py
 pkgpyexec_DATA += ygor/graph.py
-pkgpyexec_LTLIBRARIES = ygor/collect.la
+pkgpyexec_LTLIBRARIES += ygor/collect.la
+endif
 
 ygor_collect_la_SOURCES = ygor/collect.c
 ygor_collect_la_CPPFLAGS =

@@ -260,12 +260,13 @@ struct string_chooser_fixed : public string_chooser
 
 struct string_chooser_fixed_once : public string_chooser
 {
-    string_chooser_fixed_once(uint64_t size) : m_set_size(size), m_idx(0) {}
+    string_chooser_fixed_once(uint64_t size, uint64_t start, uint64_t limit)
+        : m_set_size(size), m_start(start), m_limit(limit), m_idx(m_start) {}
     virtual ~string_chooser_fixed_once() throw () {}
 
-    virtual string_chooser* copy() { return new string_chooser_fixed_once(m_set_size); }
+    virtual string_chooser* copy() { return new string_chooser_fixed_once(m_set_size, m_start, m_limit); }
     virtual void seed(uint64_t) {}
-    virtual bool done() { return m_idx >= m_set_size; }
+    virtual bool done() { return m_idx >= m_limit; }
     virtual bool has_index() { return true; }
     virtual uint64_t index() { return m_idx++; }
     virtual uint64_t index(uint64_t idx)
@@ -275,6 +276,8 @@ struct string_chooser_fixed_once : public string_chooser
 
     private:
         uint64_t m_set_size;
+        uint64_t m_start;
+        uint64_t m_limit;
         uint64_t m_idx;
 
         string_chooser_fixed_once(const string_chooser_fixed_once&);
@@ -648,8 +651,14 @@ armnod_config_choose_fixed(struct armnod_config* ac, uint64_t size)
 YGOR_API int
 armnod_config_choose_fixed_once(struct armnod_config* ac, uint64_t size)
 {
+    return armnod_config_choose_fixed_once_slice(ac, size, 0, size);
+}
+
+YGOR_API int
+armnod_config_choose_fixed_once_slice(struct armnod_config* ac, uint64_t size, uint64_t start, uint64_t limit)
+{
     assert(ac);
-    ac->strings.reset(new string_chooser_fixed_once(size));
+    ac->strings.reset(new string_chooser_fixed_once(size, start, limit));
     return 0;
 }
 
@@ -750,6 +759,10 @@ struct armnod_argparser_impl : public armnod_argparser
     const char* charset;
     const char* strings;
     long strings_fixed;
+    long strings_fixed_start;
+    long strings_fixed_limit;
+    bool strings_fixed_start_set;
+    bool strings_fixed_limit_set;
     double strings_alpha;
     const char* lengths;
     long lengths_const;
@@ -778,6 +791,10 @@ armnod_argparser_impl :: armnod_argparser_impl(const char* _prefix, bool method)
     , charset(NULL)
     , strings("default")
     , strings_fixed(1024)
+    , strings_fixed_start(0)
+    , strings_fixed_limit(0)
+    , strings_fixed_start_set(false)
+    , strings_fixed_limit_set(false)
     , strings_alpha(0.6)
     , lengths("constant")
     , lengths_const(DEFAULT_LENGTH)
@@ -804,6 +821,16 @@ armnod_argparser_impl :: armnod_argparser_impl(const char* _prefix, bool method)
                 .description("cardinality of the set of strings that are generated (for methods that support it)")
                 .metavar("NUM")
                 .as_long(&strings_fixed);
+        ap.arg().long_name((prefix + "fixed-start").c_str())
+                .description("starting index for the fixed-size method")
+                .metavar("NUM")
+                .as_long(&strings_fixed_start)
+                .set_true(&strings_fixed_start_set);
+        ap.arg().long_name((prefix + "fixed-limit").c_str())
+                .description("ending index for the fixed-size method")
+                .metavar("NUM")
+                .as_long(&strings_fixed_limit)
+                .set_true(&strings_fixed_limit_set);
         ap.arg().long_name((prefix + "alpha").c_str())
                 .description("the alpha parameter (for Zipf methods)")
                 .metavar("A")
@@ -855,7 +882,21 @@ armnod_argparser_impl :: config()
     }
     else if (strings_method == "fixed-once")
     {
-        FAIL_IF_NEGATIVE(armnod_config_choose_fixed_once(&configuration, strings_fixed));
+        uint64_t size = strings_fixed;
+        uint64_t start = strings_fixed_start_set ? strings_fixed_start : 0;
+        uint64_t limit = strings_fixed_limit_set ? strings_fixed_limit : strings_fixed;
+
+        if (limit > size)
+        {
+            limit = size;
+        }
+
+        if (start > limit)
+        {
+            start = limit;
+        }
+
+        FAIL_IF_NEGATIVE(armnod_config_choose_fixed_once_slice(&configuration, size, start, limit));
     }
     else if (strings_method == "fixed-zipf")
     {

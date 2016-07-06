@@ -111,6 +111,7 @@ AC_DEFUN([ANAL_WARNINGS],
         AX_CHECK_COMPILE_FLAG([-Wunused],[WANAL_CFLAGS="${WANAL_CFLAGS} -Wunused"],,)
         AX_CHECK_COMPILE_FLAG([-Wvolatile-register-var],[WANAL_CFLAGS="${WANAL_CFLAGS} -Wvolatile-register-var"],,)
         AX_CHECK_COMPILE_FLAG([-Wwrite-strings],[WANAL_CFLAGS="${WANAL_CFLAGS} -Wwrite-strings"],,)
+        AX_CHECK_COMPILE_FLAG([-Wno-deprecated-declarations],[WANAL_CFLAGS="${WANAL_CFLAGS} -Wno-deprecated-declarations"],,)
     fi
     WANAL_CXXFLAGS="${WANAL_CFLAGS} ${WANAL_CXXFLAGS}"
     WANAL_CFLAGS="${WANAL_CFLAGS} ${WANAL_CFLAGS_ONLY}"

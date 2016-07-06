@@ -98,6 +98,7 @@ if test x"${python_bindings}" = xyes; then
     AS_CASE([$PYTHON_VERSION], [3*], [pythonsym=PyInit_], [2*], [pythonsym=init], [])
     AC_SUBST([PYTHON_SYMBOL], [${pythonsym}])
 fi
+AM_CONDITIONAL([ENABLE_PYTHON_BINDINGS], [test x"${python_bindings}" = xyes])
 
 # Checks for header files.
 AC_CHECK_HEADER([popt.h],,[AC_MSG_ERROR([

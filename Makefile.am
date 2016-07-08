@@ -25,10 +25,12 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ACLOCAL_AMFLAGS = -I m4 ${ACLOCAL_FLAGS}
-AM_MAKEFLAGS = --no-print-directory
 AM_CPPFLAGS = $(PO6_CFLAGS) $(E_CFLAGS)
 AM_CFLAGS   = -fvisibility=hidden $(PO6_CFLAGS) $(E_CFLAGS) $(WANAL_CFLAGS)
 AM_CXXFLAGS = -fvisibility=hidden -fvisibility-inlines-hidden $(PO6_CFLAGS) $(E_CFLAGS) $(WANAL_CXXFLAGS)
+if MAKE_NO_PRINT_DIRECTORY
+AM_MAKEFLAGS = --no-print-directory
+endif
 
 CLEANFILES =
 

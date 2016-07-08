@@ -25,13 +25,14 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+#define _WITH_GETLINE
 #define __STDC_LIMIT_MACROS
 
 // C
-#include <cassert>
-#include <cmath>
-#include <cstdlib>
-#include <cstring>
+#include <assert.h>
+#include <math.h>
+#include <stdlib.h>
+#include <string.h>
 
 // POSIX
 #include <dirent.h>

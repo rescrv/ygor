@@ -49,6 +49,9 @@ struct ygor_data_record
 };
 
 /* data logger */
+#define YGOR_US = 1000ULL
+#define YGOR_MS = (1000ULL * YGOR_US)
+#define YGOR_S = (1000ULL * YGOR_MS)
 struct ygor_data_logger;
 struct ygor_data_logger* ygor_data_logger_create(const char* output,
                                                  uint64_t scale_when,

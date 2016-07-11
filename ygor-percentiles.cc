@@ -41,7 +41,7 @@ main(int argc, const char* argv[])
 {
     e::argparser ap;
     ap.autohelp();
-    ap.option_string("<input file> [<input file> ...]");
+    ap.option_string("<input file> [<percentile> ...]");
     bucket_scale_opts bso;
     ap.add("Units:", bso.parser());
 
@@ -78,9 +78,9 @@ main(int argc, const char* argv[])
         }
 
         char* end = NULL;
-        uint64_t percentile = strtol(ap.args()[i], &end, 10);
+        double percentile = strtod(ap.args()[i], &end);
 
-        if (!end || *end != '\0' || percentile > 100)
+        if (!end || *end != '\0' || percentile < 0 || percentile > 100)
         {
             fprintf(stderr, "percentile must be in range [0:100]\n");
             return EXIT_FAILURE;

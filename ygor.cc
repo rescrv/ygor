@@ -276,17 +276,18 @@ ygor_data_logger :: close()
 }
 
 int
-ygor_data_logger :: record(ygor_data_record* dr)
+ygor_data_logger :: record(ygor_data_record* _dr)
 {
-    dr->when = floor(double(dr->when) / double(m_scale_when) + 0.5);
+    ygor_data_record dr = *_dr;
+    dr.when = floor(double(dr.when) / double(m_scale_when) + 0.5);
 
-    if (dr->series < 0xffff0000U)
+    if (dr.series < 0xffff0000U)
     {
-        dr->data = floor(double(dr->data) / double(m_scale_data) + 0.5);
+        dr.data = floor(double(dr.data) / double(m_scale_data) + 0.5);
     }
 
     m_data_mtx.lock();
-    m_data.push_back(*dr);
+    m_data.push_back(dr);
 
     if (m_data.size() > 65536)
     {

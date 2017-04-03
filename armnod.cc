@@ -405,6 +405,7 @@ struct armnod_generator
     bool init(const armnod_config* config);
     void seed(uint64_t seed) { guacamole_seed(m_random, seed); }
     const char* generate(size_t* sz);
+    uint64_t generate_idx_only();
 
     private:
         guacamole* m_random;
@@ -504,6 +505,17 @@ armnod_generator :: generate(size_t* sz)
     return m_buffer;
 }
 
+uint64_t
+armnod_generator :: generate_idx_only()
+{
+    if (m_strings.get() && !m_strings->done())
+    {
+        return m_strings->seed(m_random);
+    }
+
+    return 0;
+}
+
 YGOR_API armnod_generator*
 armnod_generator_create(const struct armnod_config* ac)
 {
@@ -545,6 +557,12 @@ YGOR_API const char*
 armnod_generate_sz(struct armnod_generator* ag, uint64_t* sz)
 {
     return ag->generate(sz);
+}
+
+YGOR_API uint64_t
+armnod_generate_idx_only(struct armnod_generator* ag)
+{
+    return ag->generate_idx_only();
 }
 
 /////////////////////////// Argparser Implementation ///////////////////////////

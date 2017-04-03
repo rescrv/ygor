@@ -105,6 +105,7 @@ const char* armnod_generate(struct armnod_generator* ag);
  * subsequent call to "strlen".
  */
 const char* armnod_generate_sz(struct armnod_generator* ag, uint64_t* sz);
+uint64_t armnod_generate_idx_only(struct armnod_generator* ag);
 
 #ifdef __cplusplus
 } /* extern "C" */

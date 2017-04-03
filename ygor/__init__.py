@@ -24,13 +24,7 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-
-from __future__ import absolute_import
-from __future__ import print_function
-from __future__ import unicode_literals
-from __future__ import with_statement
-
-import ConfigParser
+import configparser
 import argparse
 import collections
 import errno
@@ -216,7 +210,7 @@ class Experiment(object):
 class Configuration(object):
 
     def __init__(self, exp, config, pcmdline, ecmdline):
-        self.cp = ConfigParser.RawConfigParser(allow_no_value=True)
+        self.cp = configparser.RawConfigParser(allow_no_value=True)
         self.cp.read(config)
         exp.load_parameters_from_config(self)
         exp.load_parameters_from_cmdline(pcmdline)
@@ -238,17 +232,17 @@ class Configuration(object):
     def get_parameter(self, param, old_value):
         try:
             return old_value.cast(self.cp.get('parameters', param))
-        except ConfigParser.NoSectionError as e:
+        except configparser.NoSectionError as e:
             return old_value
-        except ConfigParser.NoOptionError as e:
+        except configparser.NoOptionError as e:
             return old_value
 
     def get_envvar(self, param, old_value):
         try:
             return old_value.cast(self.cp.get('envvars', param))
-        except ConfigParser.NoSectionError as e:
+        except configparser.NoSectionError as e:
             return old_value
-        except ConfigParser.NoOptionError as e:
+        except configparser.NoOptionError as e:
             return old_value
 
     def get_host_options(self, host):
@@ -396,7 +390,7 @@ class Host(object):
     def load_from_config(self, config):
         opts = config.get_host_options(self.name)
         for o in MANDATORY_OPTIONS:
-            if o not in opts.keys():
+            if o not in list(opts.keys()):
                 raise RuntimeError('Host %s missing option %s' % (self.name, o))
         self.location = opts['location']
         self.workspace = opts['workspace']
@@ -446,7 +440,7 @@ class HostSet(object):
             opts = defaults.copy()
             opts.update(config.get_host_options(name))
             for o in MANDATORY_OPTIONS:
-                if o not in opts.keys():
+                if o not in list(opts.keys()):
                     raise RuntimeError('Host %s missing option %s' % (name, o))
             self.hosts.append(SSH.HostMetaData(location=opts['location'],
                                                username=opts.get('username', None),
@@ -521,7 +515,7 @@ class Parameter(object):
             value = self.value.value
         else:
             value = self.value
-        assert isinstance(value, int) or isinstance(value, long)
+        assert isinstance(value, int) or isinstance(value, int)
         return value
 
     def cast(self, value):
@@ -546,7 +540,7 @@ class Environment(object):
             value = self.value.value
         else:
             value = self.value
-        assert isinstance(value, int) or isinstance(value, long)
+        assert isinstance(value, int) or isinstance(value, int)
         return value
 
     def cast(self, value):
@@ -625,7 +619,7 @@ def configure(argv):
     exp = get_experiment(args.experiment)
     exp.get_parameters()
     exp.get_envvars()
-    cp = ConfigParser.RawConfigParser(allow_no_value=True)
+    cp = configparser.RawConfigParser(allow_no_value=True)
     cp.add_section('parameters')
     cp.add_section('envvars')
     for p in exp.get_parameters():

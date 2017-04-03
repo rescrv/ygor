@@ -31,16 +31,17 @@ AC_PREREQ([2.62])
 AC_INIT([ygor], [0.1.dev], [robert@rescrv.net])
 AM_INIT_AUTOMAKE([foreign subdir-objects dist-bzip2])
 AM_SILENT_RULES([yes])
-AM_PATH_PYTHON([2.6])
+AM_PATH_PYTHON([3.0])
 LT_PREREQ([2.2])
 LT_INIT
-AC_CONFIG_SRCDIR([ygor.cc])
+AC_CONFIG_SRCDIR([ygor-internal.h])
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_MACRO_DIR([m4])
 
 # Checks for programs.
 AC_PROG_CXX
 AC_PROG_CC
+AM_PROG_AS
 AC_LANG(C++)
 
 AS_IF([make -h 2>/dev/null | grep no-print-directory > /dev/null], [make_no_print=yes])
@@ -97,7 +98,7 @@ AC_ARG_ENABLE([python_bindings], [AS_HELP_STRING([--enable-python-bindings],
               [build Python bindings @<:@default: no@:>@])],
               [python_bindings=${enableval}], [python_bindings=no])
 if test x"${python_bindings}" = xyes; then
-    AC_PYTHON_DEVEL([>= '2.6'])
+    AC_PYTHON_DEVEL([>= '3.0'])
     AS_CASE([$PYTHON_VERSION], [3*], [pythonsym=PyInit_], [2*], [pythonsym=init], [])
     AC_SUBST([PYTHON_SYMBOL], [${pythonsym}])
 fi

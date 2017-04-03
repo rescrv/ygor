@@ -1,4 +1,4 @@
-// Copyright (c) 2014, Robert Escriva
+// Copyright (c) 2014,2017, Robert Escriva
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -9,7 +9,7 @@
 //     * Redistributions in binary form must reproduce the above copyright
 //       notice, this list of conditions and the following disclaimer in the
 //       documentation and/or other materials provided with the distribution.
-//     * Neither the name of Ygor nor the names of its contributors may be used
+//     * Neither the name of ygor nor the names of its contributors may be used
 //       to endorse or promote products derived from this software without
 //       specific prior written permission.
 //
@@ -25,13 +25,65 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-#ifndef ygor_guacamole_
-#define ygor_guacamole_
+#ifndef ygor_common_h_
+#define ygor_common_h_
 
-// C
-#include <stdint.h>
+// e
+#include <e/popt.h>
 
-void
-guacamole_mash(uint64_t number, uint32_t output[16]);
+// ygor
+#include <ygor/data.h>
 
-#endif // ygor_guacamole_
+const char*
+units_to_str(ygor_units u);
+bool
+str_to_units(const char* suffix, ygor_units* u);
+
+const char*
+precision_to_str(ygor_precision p);
+
+struct series_description
+{
+    series_description();
+    series_description(const char* f, const char* s);
+
+    std::string filename;
+    std::string series_name;
+};
+
+std::vector<series_description>
+compute_series(const char** args, size_t args_sz);
+
+struct data_points
+{
+    data_points();
+    data_points(ygor_data_point* data, uint64_t data_sz);
+
+    ygor_data_point* data;
+    uint64_t data_sz;
+};
+
+class bucket_options
+{
+    public:
+        bucket_options();
+
+    public:
+        const e::argparser& parser();
+        uint64_t bucket();
+        ygor_units units();
+        bool validate();
+
+    private:
+        bucket_options(const bucket_options&);
+        bucket_options& operator = (const bucket_options&);
+
+    private:
+        e::argparser m_ap;
+        const char* m_bucket_str;
+        const char* m_units_str;
+        uint64_t m_bucket;
+        ygor_units m_bucket_units;
+};
+
+#endif // ygor_common_h_

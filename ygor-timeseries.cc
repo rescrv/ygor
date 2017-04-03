@@ -1,4 +1,4 @@
-// Copyright (c) 2013, Robert Escriva
+// Copyright (c) 2013,2017, Robert Escriva
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -32,68 +32,62 @@
 // e
 #include <e/popt.h>
 
-// Ygor
-#include "ygor.h"
-#include "ygor-internal.h"
+// ygor
+#include <ygor/data.h>
+#include "common.h"
 
 int
 main(int argc, const char* argv[])
 {
     e::argparser ap;
     ap.autohelp();
-    ap.option_string("<input file> [<input file> ...]");
-    bucket_scale_opts bso;
-    ap.add("Units:", bso.parser());
+    ap.option_string("<input> [<input> ...]");
+    bucket_options bopts;
+    ap.add("Bucket options:", bopts.parser());
 
     if (!ap.parse(argc, argv))
     {
         return EXIT_FAILURE;
     }
 
-    if (!bso.validate())
+    if (!bopts.validate())
     {
         return EXIT_FAILURE;
     }
 
-    if (ap.args_sz() < 1)
+    if (ap.args_sz() != 1)
     {
-        fprintf(stderr, "specify at least one input file\n");
+        fprintf(stderr, "specify just one input file\n");
         return EXIT_FAILURE;
     }
 
-    std::vector<ygor_series> timeseries;
-    timeseries.resize(ap.args_sz());
-    size_t max_idx = 0;
+    std::vector<series_description> series = compute_series(ap.args(), ap.args_sz());
+    std::vector<data_points> timeseries;
 
-    for (size_t i = 0; i < ap.args_sz(); ++i)
+    for (size_t i = 0; i < series.size(); ++i)
     {
-        if (ygor_timeseries(ap.args()[i], bso.bucket(), &timeseries[i].data, &timeseries[i].data_sz) < 0)
+        ygor_data_reader* ydr = NULL;
+        ygor_data_iterator* ydi = NULL;
+        ygor_data_point* ydp;
+        size_t ydp_sz;
+
+        if (!(ydr = ygor_data_reader_create(series[i].filename.c_str())) ||
+            !(ydi = ygor_data_iterate(ydr, series[i].series_name.c_str())) ||
+            !(ydi = ygor_data_convert_units(ydi, bopts.units(), ygor_data_iterator_series(ydi)->dep_units)) ||
+            ygor_timeseries(ydi, bopts.bucket(), &ydp, &ydp_sz) < 0)
         {
             fprintf(stderr, "cannot create timeseries from input %s\n", ap.args()[i]);
             return EXIT_FAILURE;
         }
 
-        max_idx = std::max(max_idx, timeseries[i].data_sz);
-    }
+        timeseries.push_back(data_points(ydp, ydp_sz));
+        ygor_data_iterator_destroy(ydi);
+        ygor_data_reader_destroy(ydr);
 
-    for (size_t idx = 0; idx < max_idx; ++idx)
-    {
-        fprintf(stdout, "%ld", bso.index_scaled(idx));
-
-        for (size_t i = 0; i < timeseries.size(); ++i)
+        for (size_t j = 0; j < ydp_sz; ++j)
         {
-            if (idx < timeseries[i].data_sz)
-            {
-                assert(timeseries[i].data[idx].x == bso.index(idx));
-                fprintf(stdout, "\t%g", timeseries[i].data[idx].y);
-            }
-            else
-            {
-                fprintf(stdout, "\t-");
-            }
+            printf("%lu %lu\n", ydp[j].indep.precise, ydp[j].dep.precise);
         }
-
-        fprintf(stdout, "\n");
     }
 
     return EXIT_SUCCESS;

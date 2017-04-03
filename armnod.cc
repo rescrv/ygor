@@ -1,4 +1,4 @@
-// Copyright (c) 2013-2014, Robert Escriva
+// Copyright (c) 2013-2017, Robert Escriva
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -9,7 +9,7 @@
 //     * Redistributions in binary form must reproduce the above copyright
 //       notice, this list of conditions and the following disclaimer in the
 //       documentation and/or other materials provided with the distribution.
-//     * Neither the name of Ygor nor the names of its contributors may be used
+//     * Neither the name of ygor nor the names of its contributors may be used
 //       to endorse or promote products derived from this software without
 //       specific prior written permission.
 //
@@ -29,20 +29,37 @@
 
 // STL
 #include <memory>
-#include <stdexcept>
-#include <tr1/random>
-#include <vector>
+#include <string>
 
-// e
-#include <e/endian.h>
-
-// Ygor
-#include "ygor.h"
-#include "guacamole.h"
-#include "ygor-internal.h"
+// ygor
+#include <ygor/armnod.h>
+#include <ygor/guacamole.h>
+#include "visibility.h"
 
 #define DEFAULT_LENGTH 16
 #define DEFAULT_SET_SIZE 1000
+
+#define CATCH_BAD_ALLOC_NEG(X) \
+    try \
+    { \
+        X \
+    } \
+    catch (std::bad_alloc& ba) \
+    { \
+        errno = ENOMEM; \
+        return -1; \
+    }
+
+#define CATCH_BAD_ALLOC_NULL(X) \
+    try \
+    { \
+        X \
+    } \
+    catch (std::bad_alloc& ba) \
+    { \
+        errno = ENOMEM; \
+        return NULL; \
+    }
 
 ///////////////////////////// Predefined Alphabets /////////////////////////////
 
@@ -60,133 +77,9 @@ static const char alphabet_upper[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 static const char alphabet_punct[] = "!\"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~";
 static const char alphabet_hex[] = "0123456789abcdef";
 
-///////////////////////////// Guacamole-based PRNG /////////////////////////////
-
-struct guacamole_prng
-{
-    guacamole_prng();
-    uint64_t generate(unsigned bits);
-    void seek(uint64_t idx);
-
-    private:
-        guacamole_prng(const guacamole_prng&);
-        guacamole_prng& operator = (const guacamole_prng&);
-        void mash();
-
-        uint64_t m_nonce;
-        unsigned m_buffer_idx;
-        uint64_t m_leftovers;
-        unsigned m_bits_leftover;
-        union {
-            uint32_t b32[16];
-            uint64_t b64[8];
-        } m_buffer;
-};
-
-guacamole_prng :: guacamole_prng()
-    : m_nonce(0)
-    , m_buffer_idx(0)
-    , m_leftovers(0)
-    , m_bits_leftover(0)
-    , m_buffer()
-{
-    seek(0);
-}
-
-uint64_t
-guacamole_prng :: generate(unsigned bits)
-{
-    assert(bits <= 64);
-    assert(m_buffer_idx < 8);
-    assert(m_bits_leftover > 0);
-    const unsigned original_bits = bits;
-    const unsigned first_consume = std::min(m_bits_leftover, bits);
-    const uint64_t first_mask = (1ULL << first_consume) - 1ULL;
-    uint64_t ret = m_leftovers & first_mask;
-    bits -= first_consume;
-    m_leftovers >>= first_consume;
-    m_bits_leftover -= first_consume;
-    assert(bits == 0 || m_bits_leftover == 0);
-
-    if (m_bits_leftover == 0)
-    {
-        ++m_buffer_idx;
-
-        if (m_buffer_idx >= 8)
-        {
-            mash();
-            assert(m_buffer_idx == 0);
-        }
-
-        m_leftovers = m_buffer.b64[m_buffer_idx];
-        m_bits_leftover = 64;
-    }
-
-    if (bits > 0)
-    {
-        const unsigned second_consume = bits;
-        const uint64_t second_mask = (1ULL << second_consume) - 1ULL;
-        ret |= (m_leftovers & second_mask) << first_consume;
-        m_leftovers >>= second_consume;
-        m_bits_leftover -= second_consume;
-    }
-
-    assert(m_buffer_idx < 8);
-    assert(m_bits_leftover > 0);
-    assert(original_bits == 64 || ret == (ret & ((1ULL << original_bits) - 1)));
-    return ret;
-}
-
-void
-guacamole_prng :: seek(uint64_t idx)
-{
-    m_nonce = idx;
-    m_buffer_idx = 8;
-    m_leftovers = 0;
-    m_bits_leftover = 0;
-    mash();
-    m_leftovers = m_buffer.b64[m_buffer_idx];
-    m_bits_leftover = 64;
-}
-
-void
-guacamole_prng :: mash()
-{
-    assert(m_buffer_idx == 8);
-    guacamole_mash(m_nonce, m_buffer.b32);
-    m_buffer_idx = 0;
-    ++m_nonce;
-}
-
-/////////////////////////////////// Utilities //////////////////////////////////
-
-namespace
-{
-
-unsigned
-random_bits_for(uint64_t range)
-{
-    unsigned bits = 0;
-
-    while (bits < 64 && (1ULL << bits) < range)
-    {
-        ++bits;
-    }
-
-    return bits;
-}
-
-double
-scale_random_bits(unsigned bits, uint64_t range)
-{
-    double scale = range;
-    scale = scale / (1ULL << bits);
-    return scale;
-}
-
-} // namespace
-
 //////////////////////////////// String Choosers ///////////////////////////////
+// a string_chooser returns a uint64_t indicating the seed to be used for
+// generating the next string, and tracks when generation is done
 
 struct string_chooser
 {
@@ -194,65 +87,26 @@ struct string_chooser
     virtual ~string_chooser() throw () {}
 
     virtual string_chooser* copy() = 0;
-    virtual void seed(uint64_t) = 0;
+    virtual uint64_t seed(guacamole* g) = 0;
     virtual bool done() = 0;
-    virtual bool has_index() = 0;
-    virtual uint64_t index() = 0;
-    virtual uint64_t index(uint64_t idx) = 0;
 
     private:
         string_chooser(const string_chooser&);
         string_chooser& operator = (const string_chooser&);
 };
 
-struct string_chooser_arbitrary : public string_chooser
-{
-    string_chooser_arbitrary() {}
-    virtual ~string_chooser_arbitrary() throw () {}
-
-    virtual string_chooser* copy() { return new string_chooser_arbitrary(); }
-    virtual void seed(uint64_t) {}
-    virtual bool done() { return false; }
-    virtual bool has_index() { return false; }
-    virtual uint64_t index() { return 0; }
-    virtual uint64_t index(uint64_t idx) { return idx; }
-
-    private:
-        string_chooser_arbitrary(const string_chooser_arbitrary&);
-        string_chooser_arbitrary& operator = (const string_chooser_arbitrary&);
-};
-
 struct string_chooser_fixed : public string_chooser
 {
-    string_chooser_fixed(uint64_t size)
-        : m_guacamole(new guacamole_prng())
-        , m_set_size(size)
-        , m_bits(random_bits_for(size))
-        , m_scale(scale_random_bits(m_bits, size))
-    {
-    }
+    string_chooser_fixed(uint64_t size) : m_size(size) {}
     virtual ~string_chooser_fixed() throw () {}
 
-    virtual string_chooser* copy() { return new string_chooser_fixed(m_set_size); }
-    virtual void seed(uint64_t s) { m_guacamole->seek(s); }
+    virtual string_chooser* copy() { return new string_chooser_fixed(m_size); }
+    virtual uint64_t seed(guacamole* g)
+    { double d = guacamole_double(g); return m_size * d; }
     virtual bool done() { return false; }
-    virtual bool has_index() { return true; }
-    virtual uint64_t index()
-    {
-        uint64_t x = m_guacamole->generate(m_bits) * m_scale;
-        assert(x < m_set_size);
-        return x;
-    }
-    virtual uint64_t index(uint64_t idx)
-    {
-        return idx;
-    }
 
     private:
-        const std::auto_ptr<guacamole_prng> m_guacamole;
-        uint64_t m_set_size;
-        unsigned m_bits;
-        double m_scale;
+        uint64_t m_size;
 
         string_chooser_fixed(const string_chooser_fixed&);
         string_chooser_fixed& operator = (const string_chooser_fixed&);
@@ -261,21 +115,15 @@ struct string_chooser_fixed : public string_chooser
 struct string_chooser_fixed_once : public string_chooser
 {
     string_chooser_fixed_once(uint64_t size, uint64_t start, uint64_t limit)
-        : m_set_size(size), m_start(start), m_limit(limit), m_idx(m_start) {}
+        : m_size(size), m_start(start), m_limit(limit), m_idx(m_start) {}
     virtual ~string_chooser_fixed_once() throw () {}
 
-    virtual string_chooser* copy() { return new string_chooser_fixed_once(m_set_size, m_start, m_limit); }
-    virtual void seed(uint64_t) {}
+    virtual string_chooser* copy() { return new string_chooser_fixed_once(m_size, m_start, m_limit); }
+    virtual uint64_t seed(guacamole*) { return m_idx++; }
     virtual bool done() { return m_idx >= m_limit; }
-    virtual bool has_index() { return true; }
-    virtual uint64_t index() { return m_idx++; }
-    virtual uint64_t index(uint64_t idx)
-    {
-        return idx;
-    }
 
     private:
-        uint64_t m_set_size;
+        uint64_t m_size;
         uint64_t m_start;
         uint64_t m_limit;
         uint64_t m_idx;
@@ -284,103 +132,18 @@ struct string_chooser_fixed_once : public string_chooser
         string_chooser_fixed_once& operator = (const string_chooser_fixed_once&);
 };
 
-// The core of string chooser_fixed_zipf reimplements YCSB
-// Source: core/src/main/java/com/yahoo/ycsb/generator/ZipfianGenerator.java
-// Original License:
-//
-// Copyright (c) 2010 Yahoo! Inc. All rights reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License"); you
-// may not use this file except in compliance with the License. You
-// may obtain a copy of the License at
-//
-// http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License. See accompanying
-// LICENSE file.
-//
-// Author:  Robert Escriva
-// Licesne:  Use it under Apache or 3-Clause BSD as advised by your lawyer.
 struct string_chooser_fixed_zipf : public string_chooser
 {
-    string_chooser_fixed_zipf(uint64_t size, double alpha)
-        : m_guacamole(new guacamole_prng())
-        , m_set_size(size)
-        , m_bits(random_bits_for(size))
-        , m_alpha(alpha)
-        , m_theta(1.0 - (1.0 / m_alpha))
-        , m_zetan(zeta(m_set_size, m_theta))
-        , m_eta((1 - pow(2.0 / m_set_size, 1 - m_theta)) / (1 - zeta(2, m_theta) / m_zetan))
-    {
-    }
+    string_chooser_fixed_zipf(uint64_t size, double theta)
+        : m_zp() { guacamole_zipf_init_theta(size, theta, &m_zp); }
     virtual ~string_chooser_fixed_zipf() throw () {}
 
-    virtual string_chooser* copy()
-    { return new string_chooser_fixed_zipf(m_set_size, m_alpha, m_theta, m_zetan, m_eta); }
-    virtual void seed(uint64_t s) { m_guacamole->seek(s); }
+    virtual string_chooser* copy() { return new string_chooser_fixed_zipf(m_zp.n, m_zp.theta); }
+    virtual uint64_t seed(guacamole* g) { return guacamole_zipf(g, &m_zp); }
     virtual bool done() { return false; }
-    virtual bool has_index() { return true; }
-    virtual uint64_t index()
-    {
-        double u = m_guacamole->generate(m_bits);
-        u = u / (1U << m_bits);
-        assert(u >= 0.0 && u < 1);
-        double uz = u * m_zetan;
-
-        if (uz < 1.0)
-        {
-            return 0;
-        }
-
-        if (uz < 1.0 + pow(0.5, m_theta))
-        {
-            return 1;
-        }
-
-        uint64_t idx = m_set_size * pow(m_eta * u - m_eta + 1, m_alpha);
-        assert(idx < m_set_size);
-        return idx;
-    }
-    virtual uint64_t index(uint64_t idx)
-    {
-        return idx;
-    }
 
     private:
-        static double zeta(uint64_t n, double theta)
-        {
-            double sum = 0;
-
-            for (uint64_t i = 0; i < n; ++i)
-            {
-                sum += 1. / pow(i + 1, theta);
-            }
-
-            return sum;
-        }
-        string_chooser_fixed_zipf(uint64_t size, double alpha,
-                                  double theta, double zetan, double eta)
-            : m_guacamole(new guacamole_prng())
-            , m_set_size(size)
-            , m_bits(random_bits_for(size))
-            , m_alpha(alpha)
-            , m_theta(theta)
-            , m_zetan(zetan)
-            , m_eta(eta)
-        {
-        }
-
-        const std::auto_ptr<guacamole_prng> m_guacamole;
-        const uint64_t m_set_size;
-        const uint64_t m_bits;
-        const double m_alpha;
-        const double m_theta;
-        const double m_zetan;
-        const double m_eta;
+        guacamole_zipf_params m_zp;
 
         string_chooser_fixed_zipf(const string_chooser_fixed_zipf&);
         string_chooser_fixed_zipf& operator = (const string_chooser_fixed_zipf&);
@@ -395,7 +158,7 @@ struct length_chooser
 
     virtual length_chooser* copy() = 0;
     virtual uint64_t max() = 0;
-    virtual uint64_t length(guacamole_prng* gp) = 0;
+    virtual uint64_t length(guacamole* g) = 0;
 
     private:
         length_chooser(const length_chooser&);
@@ -404,15 +167,15 @@ struct length_chooser
 
 struct length_chooser_constant : public length_chooser
 {
-    length_chooser_constant(uint64_t sz) : m_sz(sz) {}
+    length_chooser_constant(uint64_t size) : m_size(size) {}
     virtual ~length_chooser_constant() throw () {}
 
-    virtual length_chooser* copy() { return new length_chooser_constant(m_sz); }
-    virtual uint64_t max() { return m_sz; }
-    virtual uint64_t length(guacamole_prng*) { return m_sz; }
+    virtual length_chooser* copy() { return new length_chooser_constant(m_size); }
+    virtual uint64_t max() { return m_size; }
+    virtual uint64_t length(guacamole*) { return m_size; }
 
     private:
-        uint64_t m_sz;
+        uint64_t m_size;
 
         length_chooser_constant(const length_chooser_constant&);
         length_chooser_constant& operator = (const length_chooser_constant&);
@@ -420,37 +183,24 @@ struct length_chooser_constant : public length_chooser
 
 struct length_chooser_uniform : public length_chooser
 {
-    length_chooser_uniform(unsigned _min, unsigned _max)
-        : m_min(_min)
-        , m_max(_max)
-        , m_bits(random_bits_for(_max))
-        , m_scale(scale_random_bits(m_bits, _max))
-    {
-        assert(m_min <= m_max);
-    }
+    length_chooser_uniform(uint64_t _min, uint64_t _max)
+        : m_min(_min), m_max(_max) { assert(m_min <= m_max); }
     virtual ~length_chooser_uniform() throw () {}
 
     virtual length_chooser* copy() { return new length_chooser_uniform(m_min, m_max); }
     virtual uint64_t max() { return m_max; }
-    virtual uint64_t length(guacamole_prng* gp)
-    {
-        uint64_t ret = gp->generate(m_bits) * m_scale;
-        if (ret < m_min) { ret = m_min; }
-        if (ret > m_max) { ret = m_max; }
-        return ret;
-    }
+    virtual uint64_t length(guacamole* g)
+    { double d = guacamole_double(g); return m_min + (m_max - m_min) * d; }
 
     private:
-        unsigned m_min;
-        unsigned m_max;
-        unsigned m_bits;
-        double m_scale;
+        uint64_t m_min;
+        uint64_t m_max;
 
         length_chooser_uniform(const length_chooser_uniform&);
         length_chooser_uniform& operator = (const length_chooser_uniform&);
 };
 
-///////////////////////// Config and Generator Classes /////////////////////////
+///////////////////////////////// Configuration ////////////////////////////////
 
 struct armnod_config
 {
@@ -468,114 +218,54 @@ struct armnod_config
 
 armnod_config :: armnod_config()
     : alphabet(alphabet_default)
-    , strings(new string_chooser_arbitrary())
-    , lengths(new length_chooser_constant(8))
+    , strings()
+    , lengths(new length_chooser_constant(DEFAULT_LENGTH))
 {
 }
-
-struct armnod_generator
-{
-    armnod_generator(const armnod_config* config);
-    ~armnod_generator() throw ();
-
-    void seed(uint64_t);
-    const char* generate(uint64_t* sz);
-    const char* generate_idx(uint64_t idx, uint64_t* sz);
-    uint64_t generate_idx_only();
-
-    private:
-        const char* generate_from_position(uint64_t* sz);
-
-        const std::auto_ptr<guacamole_prng> m_guacamole;
-        const std::auto_ptr<string_chooser> m_strings;
-        const std::auto_ptr<length_chooser> m_lengths;
-        char* m_buffer;
-        char m_alphabet[256] __attribute__ ((aligned (64)));
-
-        armnod_generator(const armnod_generator&);
-        armnod_generator& operator = (const armnod_generator&);
-};
-
-////////////////////////////////// Public API //////////////////////////////////
 
 extern "C"
 {
 
-YGOR_API guacamole*
-guacamole_create(uint64_t seed)
-{
-    guacamole_prng* ptr = new (std::nothrow) guacamole_prng();
-    ptr->seek(seed);
-    return reinterpret_cast<guacamole*>(ptr);
-}
-
-YGOR_API void
-guacamole_destroy(guacamole* g)
-{
-    guacamole_prng* ptr = reinterpret_cast<guacamole_prng*>(g);
-
-    if (ptr)
-    {
-        delete ptr;
-    }
-}
-
-YGOR_API void
-guacamole_generate(guacamole* _g, void* _bytes, size_t bytes_sz)
-{
-    guacamole_prng* g = reinterpret_cast<guacamole_prng*>(_g);
-    unsigned char* bytes = static_cast<unsigned char*>(_bytes);
-
-    while (bytes_sz >= 8)
-    {
-        uint64_t x = g->generate(64);
-        e::pack64le(x, bytes);
-        bytes += 8;
-        bytes_sz -= 8;
-    }
-
-    uint64_t x = g->generate(bytes_sz * 8);
-
-    while (bytes_sz > 0)
-    {
-        bytes[0] = x & 255;
-        ++bytes;
-        --bytes_sz;
-        x >>= 8;
-    }
-}
-
 YGOR_API armnod_config*
 armnod_config_create()
 {
-    return new (std::nothrow) armnod_config();
+    CATCH_BAD_ALLOC_NULL(
+    return new armnod_config();
+    );
 }
 
 YGOR_API armnod_config*
 armnod_config_copy(armnod_config* other)
 {
-    armnod_config* c = new (std::nothrow) armnod_config();
+    CATCH_BAD_ALLOC_NULL(
+    std::auto_ptr<armnod_config> c(new (std::nothrow) armnod_config());
 
-    if (c)
+    if (c.get())
     {
         c->alphabet = other->alphabet;
-        c->strings.reset(other->strings->copy());
+
+        if (c->strings.get())
+        {
+            c->strings.reset(other->strings->copy());
+        }
+
         c->lengths.reset(other->lengths->copy());
     }
 
-    return c;
+    return c.release();
+    );
 }
 
 YGOR_API void
 armnod_config_destroy(armnod_config* ac)
 {
-    assert(ac);
     delete ac;
 }
 
 YGOR_API int
 armnod_config_alphabet(struct armnod_config* ac, const char* _chars)
 {
+    CATCH_BAD_ALLOC_NEG(
     std::string chars(_chars);
 
     if (chars.size() >= 256)
@@ -585,11 +275,13 @@ armnod_config_alphabet(struct armnod_config* ac, const char* _chars)
 
     ac->alphabet = chars;
     return 0;
+    );
 }
 
 YGOR_API int
 armnod_config_charset(struct armnod_config* ac, const char* _name)
 {
+    CATCH_BAD_ALLOC_NEG(
     std::string name(_name);
 
     if (name == "default")
@@ -630,22 +322,27 @@ armnod_config_charset(struct armnod_config* ac, const char* _name)
     }
 
     return 0;
+    );
 }
 
 YGOR_API int
 armnod_config_choose_default(struct armnod_config* ac)
 {
+    CATCH_BAD_ALLOC_NEG(
     assert(ac);
-    ac->strings.reset(new string_chooser_arbitrary());
+    ac->strings.reset();
     return 0;
+    );
 }
 
 YGOR_API int
 armnod_config_choose_fixed(struct armnod_config* ac, uint64_t size)
 {
+    CATCH_BAD_ALLOC_NEG(
     assert(ac);
     ac->strings.reset(new string_chooser_fixed(size));
     return 0;
+    );
 }
 
 YGOR_API int
@@ -657,47 +354,176 @@ armnod_config_choose_fixed_once(struct armnod_config* ac, uint64_t size)
 YGOR_API int
 armnod_config_choose_fixed_once_slice(struct armnod_config* ac, uint64_t size, uint64_t start, uint64_t limit)
 {
+    CATCH_BAD_ALLOC_NEG(
     assert(ac);
     ac->strings.reset(new string_chooser_fixed_once(size, start, limit));
     return 0;
+    );
 }
 
 YGOR_API int
 armnod_config_choose_fixed_zipf(struct armnod_config* ac,
                                 uint64_t size, double alpha)
 {
+    CATCH_BAD_ALLOC_NEG(
     assert(ac);
     ac->strings.reset(new string_chooser_fixed_zipf(size, alpha));
     return 0;
+    );
 }
 
 YGOR_API int
 armnod_config_length_constant(struct armnod_config* ac, uint64_t length)
 {
+    CATCH_BAD_ALLOC_NEG(
     assert(ac);
     ac->lengths.reset(new length_chooser_constant(length));
     return 0;
+    );
 }
 
 YGOR_API int
 armnod_config_length_uniform(struct armnod_config* ac,
                              uint64_t min, uint64_t max)
 {
+    CATCH_BAD_ALLOC_NEG(
     assert(ac);
     ac->lengths.reset(new length_chooser_uniform(min, max));
     return 0;
+    );
+}
+
+} // extern "C"
+
+/////////////////////////////////// Generator //////////////////////////////////
+
+struct armnod_generator
+{
+    armnod_generator();
+    ~armnod_generator() throw ();
+
+    bool init(const armnod_config* config);
+    void seed(uint64_t seed) { guacamole_seed(m_random, seed); }
+    const char* generate(size_t* sz);
+
+    private:
+        guacamole* m_random;
+        guacamole* m_seeded;
+        std::auto_ptr<string_chooser> m_strings;
+        std::auto_ptr<length_chooser> m_lengths;
+        char m_alphabet[256] __attribute__ ((aligned (64)));
+        char* m_buffer;
+
+        armnod_generator(const armnod_generator&);
+        armnod_generator& operator = (const armnod_generator&);
+};
+
+#define LENGTH_ROUNDUP 4ULL
+#define LENGTH_MASK (LENGTH_ROUNDUP - 1)
+
+armnod_generator :: armnod_generator()
+    : m_random(NULL)
+    , m_seeded(NULL)
+    , m_strings()
+    , m_lengths()
+    , m_buffer(NULL)
+{
+}
+
+armnod_generator :: ~armnod_generator() throw ()
+{
+    if (m_random) guacamole_destroy(m_random);
+    if (m_seeded) guacamole_destroy(m_seeded);
+    if (m_buffer) delete m_buffer;
+}
+
+bool
+armnod_generator :: init(const armnod_config* config)
+{
+    m_random = guacamole_create(0);
+    m_seeded = guacamole_create(0);
+
+    if (!m_random || !m_seeded)
+    {
+        return false;
+    }
+
+    if (config->strings.get())
+    {
+        m_strings.reset(config->strings->copy());
+    }
+
+    m_lengths.reset(config->lengths->copy());
+    m_buffer = new char[m_lengths->max() + LENGTH_ROUNDUP * sizeof(char)];
+    assert(config->alphabet.size() < 256);
+
+    for (uint64_t i = 0; i < 256; ++i)
+    {
+        double d = i / 256. * config->alphabet.size();
+        assert(unsigned(d) < config->alphabet.size());
+        m_alphabet[i] = config->alphabet[unsigned(d)];
+    }
+
+    memset(m_buffer, 0, (m_lengths->max() + LENGTH_ROUNDUP) * sizeof(char));
+    return true;
+}
+
+#pragma GCC diagnostic ignored "-Wunsafe-loop-optimizations"
+
+const char*
+armnod_generator :: generate(size_t* sz)
+{
+    if (m_strings.get())
+    {
+        if (m_strings->done())
+        {
+            return NULL;
+        }
+
+        uint64_t seed = m_strings->seed(m_random);
+        guacamole_seed(m_seeded, seed);
+    }
+
+    uint64_t length = m_lengths->length(m_seeded);
+    uint64_t rounded = (length + LENGTH_MASK) & ~LENGTH_MASK;
+    assert(length <= rounded && length + LENGTH_ROUNDUP > rounded);
+    assert(length <= m_lengths->max());
+    assert(length <= m_lengths->max());
+    guacamole_generate(m_seeded, m_buffer, rounded);
+
+    for (uint64_t i = 0; i < rounded; i += LENGTH_ROUNDUP)
+    {
+        m_buffer[i + 0] = m_alphabet[(unsigned char)m_buffer[i + 0]];
+        m_buffer[i + 1] = m_alphabet[(unsigned char)m_buffer[i + 1]];
+        m_buffer[i + 2] = m_alphabet[(unsigned char)m_buffer[i + 2]];
+        m_buffer[i + 3] = m_alphabet[(unsigned char)m_buffer[i + 3]];
+    }
+
+    m_buffer[length] = '\0';
+    *sz = length;
+    return m_buffer;
 }
 
 YGOR_API armnod_generator*
 armnod_generator_create(const struct armnod_config* ac)
 {
-    return new armnod_generator(ac);
+    CATCH_BAD_ALLOC_NULL(
+    std::auto_ptr<armnod_generator> ag(new armnod_generator());
+
+    if (ag->init(ac))
+    {
+        return ag.release();
+    }
+    else
+    {
+        return NULL;
+    }
+    );
 }
 
 YGOR_API void
 armnod_generator_destroy(struct armnod_generator* ag)
 {
-    assert(ag);
     delete ag;
 }
 
@@ -720,28 +546,6 @@ armnod_generate_sz(struct armnod_generator* ag, uint64_t* sz)
 {
     return ag->generate(sz);
 }
-
-YGOR_API const char*
-armnod_generate_idx(struct armnod_generator* ag, uint64_t idx)
-{
-    uint64_t sz;
-    return ag->generate_idx(idx, &sz);
-}
-
-YGOR_API const char*
-armnod_generate_idx_sz(struct armnod_generator* ag,
-                       uint64_t idx, uint64_t* sz)
-{
-    return ag->generate_idx(idx, sz);
-}
-
-YGOR_API uint64_t
-armnod_generate_idx_only(struct armnod_generator* ag)
-{
-    return ag->generate_idx_only();
-}
-
-} // extern "C"
 
 /////////////////////////// Argparser Implementation ///////////////////////////
 
@@ -922,110 +726,4 @@ armnod_argparser_impl :: config()
     }
 
     return &configuration;
-}
-
-/////////////////////////// Generator Implementation ///////////////////////////
-
-#define LENGTH_ROUNDUP 4ULL
-#define LENGTH_MASK (LENGTH_ROUNDUP - 1)
-
-armnod_generator :: armnod_generator(const armnod_config* config)
-    : m_guacamole(new guacamole_prng())
-    , m_strings(config->strings->copy())
-    , m_lengths(config->lengths->copy())
-    , m_buffer(new char[config->lengths->max() + LENGTH_ROUNDUP * sizeof(char)])
-{
-    assert(config->alphabet.size() < 256);
-
-    for (uint64_t i = 0; i < 256; ++i)
-    {
-        double d = i / 256. * config->alphabet.size();
-        assert(unsigned(d) < config->alphabet.size());
-        m_alphabet[i] = config->alphabet[unsigned(d)];
-    }
-
-    memset(m_buffer, 0, (m_lengths->max() + LENGTH_ROUNDUP) * sizeof(char));
-    m_guacamole->seek(1ULL << 63);
-}
-
-armnod_generator :: ~armnod_generator() throw ()
-{
-    if (m_buffer)
-    {
-        delete[] m_buffer;
-    }
-}
-
-void
-armnod_generator :: seed(uint64_t s)
-{
-    m_guacamole->seek(s);
-    m_strings->seed(s);
-}
-
-#pragma GCC diagnostic ignored "-Wunsafe-loop-optimizations"
-
-const char*
-armnod_generator :: generate(uint64_t* sz)
-{
-    if (m_strings->done())
-    {
-        return NULL;
-    }
-
-    if (m_strings->has_index())
-    {
-        m_guacamole->seek(m_strings->index());
-    }
-
-    return generate_from_position(sz);
-}
-
-const char*
-armnod_generator :: generate_idx(uint64_t idx, uint64_t* sz)
-{
-    if (m_strings->has_index())
-    {
-        m_guacamole->seek(m_strings->index(idx));
-    }
-
-    return generate_from_position(sz);
-}
-
-uint64_t
-armnod_generator :: generate_idx_only()
-{
-    if (m_strings->has_index())
-    {
-        return m_strings->index();
-    }
-
-    return 0;
-}
-
-const char*
-armnod_generator :: generate_from_position(uint64_t* sz)
-{
-    uint64_t length = m_lengths->length(m_guacamole.get());
-    uint64_t rounded = (length + LENGTH_MASK) & ~LENGTH_MASK;
-    assert(length <= rounded && length + LENGTH_ROUNDUP > rounded);
-    assert(length <= m_lengths->max());
-    assert(length <= m_lengths->max());
-
-    for (uint64_t i = 0; i < rounded; i += LENGTH_ROUNDUP)
-    {
-        uint32_t x = m_guacamole->generate(32);
-        uint32_t a0 = (x) & 255;
-        uint32_t a1 = (x >> 8) & 255;
-        uint32_t a2 = (x >> 16) & 255;
-        uint32_t a3 = (x >> 24) & 255;
-        m_buffer[i + 0] = m_alphabet[a0];
-        m_buffer[i + 1] = m_alphabet[a1];
-        m_buffer[i + 2] = m_alphabet[a2];
-        m_buffer[i + 3] = m_alphabet[a3];
-    }
-
-    m_buffer[length] = '\0';
-    *sz = length;
-    return m_buffer;
 }

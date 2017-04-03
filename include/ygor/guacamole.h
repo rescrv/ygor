@@ -1,4 +1,4 @@
-/* Copyright (c) 2017, Robert Escriva
+/* Copyright (c) 2013-2017, Robert Escriva
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,29 +26,55 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-/* Internal usage, but external visibility from library */
-
-#ifndef ygor_internal_h_
-#define ygor_internal_h_
+#ifndef ygor_guacamole_h_
+#define ygor_guacamole_h_
 
 /* C */
 #include <stdint.h>
 #include <stdlib.h>
-
-/* ygor */
-#include <ygor/data.h>
 
 #ifdef __cplusplus
 extern "C"
 {
 #endif /* __cplusplus */
 
-int ygor_is_precise(enum ygor_precision p);
+struct guacamole;
+struct guacamole* guacamole_create(uint64_t seed);
+void guacamole_destroy(struct guacamole* g); /* who would ever want to destroy guacamole? devour? maybe */
 
-int ygor_units_compatible(enum ygor_units from, enum ygor_units to);
-double ygor_units_conversion_ratio(enum ygor_units from, enum ygor_units to);
+void guacamole_seed(struct guacamole* g, uint64_t seed);
+void guacamole_generate(struct guacamole* g, void* bytes, size_t bytes_sz);
+double guacamole_double(struct guacamole* g);
+
+// draw numbers froma  Zipf distribution with the given parameters
+struct guacamole_zipf_params
+{
+    uint64_t n;
+    double alpha;
+    double theta;
+    double zetan;
+    double zeta2;
+    double eta;
+};
+void guacamole_zipf_init_alpha(uint64_t n, double alpha, struct guacamole_zipf_params* p);
+void guacamole_zipf_init_theta(uint64_t n, double theta, struct guacamole_zipf_params* p);
+uint64_t guacamole_zipf(struct guacamole* g, struct guacamole_zipf_params* p);
+
+// scramble the given value through the specified bijection
+// useful for turning zipf output into values spread out in space
+struct guacamole_scrambler;
+struct guacamole_scrambler* guacamole_scrambler_create(uint64_t bijection);
+void guacamole_scrambler_destroy(struct guacamole_scrambler* gs);
+void guacamole_scrambler_change(struct guacamole_scrambler* gs, uint64_t bijection);
+uint64_t guacamole_scramble(struct guacamole_scrambler* gs, uint64_t value);
+
+// low level 64-bit number to 64-byte output; safe to sequentially increment #
+//
+// this is derived fromt the salsa encryption scheme, except the key and
+// ciphertext were made constant in order to speed up the routine.
+void guacamole_mash(uint64_t number, uint32_t output[16]);
 
 #ifdef __cplusplus
 } /* extern "C" */
 #endif /* __cplusplus */
-#endif /* ygor_internal_h_ */
+#endif /* ygor_guacamole_h_ */

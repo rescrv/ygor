@@ -9,7 +9,7 @@
 //     * Redistributions in binary form must reproduce the above copyright
 //       notice, this list of conditions and the following disclaimer in the
 //       documentation and/or other materials provided with the distribution.
-//     * Neither the name of Ygor nor the names of its contributors may be
+//     * Neither the name of ygor nor the names of its contributors may be
 //       used to endorse or promote products derived from this software without
 //       specific prior written permission.
 //
@@ -31,11 +31,10 @@
 // POSIX
 #include <unistd.h>
 
-// e
-#include <e/popt.h>
-
 // ygor
-#include "ygor.h"
+#include <ygor/guacamole.h>
+
+#define BUF_SZ 262144
 
 int
 main(int argc, const char* argv[])
@@ -51,16 +50,16 @@ main(int argc, const char* argv[])
     {
         g = guacamole_create(0);
     }
-    
-    char buf[4096];
+
+    char buf[BUF_SZ];
 
     while (true)
     {
-        guacamole_generate(g, buf, 4096);
+        guacamole_generate(g, buf, BUF_SZ);
 
-        if (write(STDOUT_FILENO, buf, 4096) < 0)
+        if (write(STDOUT_FILENO, buf, BUF_SZ) < 0)
         {
-            return EXIT_FAILURE;
+            break;
         }
     }
 

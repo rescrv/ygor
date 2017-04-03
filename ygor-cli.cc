@@ -9,7 +9,7 @@
 //     * Redistributions in binary form must reproduce the above copyright
 //       notice, this list of conditions and the following disclaimer in the
 //       documentation and/or other materials provided with the distribution.
-//     * Neither the name of Ygor nor the names of its contributors may be used
+//     * Neither the name of ygor nor the names of its contributors may be used
 //       to endorse or promote products derived from this software without
 //       specific prior written permission.
 //
@@ -40,16 +40,16 @@ main(int argc, const char* argv[])
 {
     std::vector<e::subcommand> cmds;
     cmds.push_back(e::subcommand("armnod",      "Generate random strings"));
-    cmds.push_back(e::subcommand("configure",   "Configure an experiment for Ygor"));
-    cmds.push_back(e::subcommand("run",         "Have Ygor run an experiment"));
+    cmds.push_back(e::subcommand("guacamole",   "Generate random bytes"));
+    cmds.push_back(e::subcommand("configure",   "Configure an experiment for ygor"));
+    cmds.push_back(e::subcommand("run",         "Have ygor run an experiment"));
+    cmds.push_back(e::subcommand("inspect",     "Inspect a data file"));
     cmds.push_back(e::subcommand("cdf",         "Generate a CDF of the data"));
-    cmds.push_back(e::subcommand("percentiles", "Compute percentile values for data"));
-    cmds.push_back(e::subcommand("dump",        "Dump the raw data"));
+    //cmds.push_back(e::subcommand("percentiles", "Compute percentile values for data"));
     cmds.push_back(e::subcommand("merge",       "Merge multiple data files"));
-    cmds.push_back(e::subcommand("summarize",   "Generate a summary of the data"));
+    //cmds.push_back(e::subcommand("summarize",   "Generate a summary of the data"));
     cmds.push_back(e::subcommand("timeseries",  "Generate a timeseries of the data"));
-    cmds.push_back(e::subcommand("t-test",      "Run the Student's t-test on multiple data files"));
-    cmds.push_back(e::subcommand("graph",       "Graph gnuplot files with Jinaj2 preprocessing"));
+    //cmds.push_back(e::subcommand("t-test",      "Run the Student's t-test on multiple data files"));
     return dispatch_to_subcommands(argc, argv,
                                    "ygor", "ygor",
                                    PACKAGE_VERSION,

@@ -1,4 +1,4 @@
-// Copyright (c) 2014, Robert Escriva
+// Copyright (c) 2014,2017, Robert Escriva
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -9,7 +9,7 @@
 //     * Redistributions in binary form must reproduce the above copyright
 //       notice, this list of conditions and the following disclaimer in the
 //       documentation and/or other materials provided with the distribution.
-//     * Neither the name of Ygor nor the names of its contributors may be used
+//     * Neither the name of ygor nor the names of its contributors may be used
 //       to endorse or promote products derived from this software without
 //       specific prior written permission.
 //
@@ -34,33 +34,100 @@
 // STL
 #include <algorithm>
 
-// Ygor
-#include "ygor.h"
+// ygor
+#include <ygor/data.h>
+#include "common.h"
 #include "ygor-internal.h"
 
-typedef std::pair<ygor_data_record, ygor_data_iterator*> heap_elem;
+bool
+series_same_name(const ygor_series& lhs, const ygor_series& rhs)
+{
+    return strcmp(lhs.name, rhs.name) == 0;
+}
 
 bool
-heap_func(const heap_elem& lhs, const heap_elem& rhs)
+series_equal(const ygor_series& lhs, const ygor_series& rhs)
 {
-    return compare_by_series_then_when(rhs.first, lhs.first);
+    return strcmp(lhs.name, rhs.name) == 0 &&
+           lhs.indep_units == rhs.indep_units &&
+           lhs.indep_precision == rhs.indep_precision &&
+           lhs.dep_units == rhs.dep_units &&
+           lhs.dep_precision == rhs.dep_precision;
+}
+
+bool
+has_series(ygor_data_reader* ydr, const char* name)
+{
+    for (size_t i = 0; i < ygor_data_reader_num_series(ydr); ++i)
+    {
+        if (strcmp(ygor_data_reader_series(ydr, i)->name, name) == 0)
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool
+conflicting_series(const std::vector<const ygor_series*> series, const ygor_series* s)
+{
+    for (size_t i = 0; i < series.size(); ++i)
+    {
+        if (strcmp(s->name, series[i]->name) == 0 && !series_equal(*s, *series[i]))
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool
+series_defined(const std::vector<const ygor_series*> series, const char* name)
+{
+    for (size_t i = 0; i < series.size(); ++i)
+    {
+        if (strcmp(name, series[i]->name) == 0)
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool
+precise_heap_func(const ygor_data_point& lhs, const ygor_data_point& rhs)
+{
+    return lhs.indep.precise > rhs.indep.precise;
+}
+
+bool
+approximate_heap_func(const ygor_data_point& lhs, const ygor_data_point& rhs)
+{
+    return lhs.indep.approximate > rhs.indep.approximate;
 }
 
 int
 main(int argc, const char* argv[])
 {
-    const char* out = "merged.dat.bz2";
+    const char* out = "merged.dat";
     bool has_out = false;
     bool overwrite = false;
+    long buffer_sz = 64;
     e::argparser ap;
     ap.autohelp();
-    ap.option_string("[<data-set> ...]");
+    ap.option_string("<input> [<input> ...]");
     ap.arg().name('o', "output")
-            .description("output file (default: merged.dat.bz2)")
+            .description("output file (default: merged.dat)")
             .as_string(&out).set_true(&has_out);
     ap.arg().name('f', "force")
             .description("overwrite the output file if it exists")
             .set_true(&overwrite);
+    ap.arg().name('b', "buffer")
+            .description("buffer size (in MB) to use for in-memory sorting (default: 64)")
+            .as_long(&buffer_sz);
 
     if (!ap.parse(argc, argv))
     {
@@ -76,38 +143,41 @@ main(int argc, const char* argv[])
         return EXIT_FAILURE;
     }
 
-    if (ap.args_sz() == 0)
-    {
-        return EXIT_SUCCESS;
-    }
-
-    std::vector<ygor_data_iterator*> iters;
+    std::vector<ygor_data_reader*> readers;
+    std::vector<const ygor_series*> series;
 
     for (size_t i = 0; i < ap.args_sz(); ++i)
     {
-        iters.push_back(ygor_data_iterator_create(ap.args()[i]));
+        ygor_data_reader* ydr = ygor_data_reader_create(ap.args()[i]);
 
-        if (!iters[i])
+        if (!ydr)
         {
             fprintf(stderr, "could not open input file %s\n", ap.args()[i]);
             return EXIT_FAILURE;
         }
-    }
 
-    const uint64_t when_scale = ygor_data_iterator_when_scale(iters[0]);
-    const uint64_t data_scale = ygor_data_iterator_data_scale(iters[0]);
+        readers.push_back(ydr);
 
-    for (size_t i = 1; i < ap.args_sz(); ++i)
-    {
-        if (when_scale != ygor_data_iterator_when_scale(iters[i]) ||
-            data_scale != ygor_data_iterator_data_scale(iters[i]))
+        for (size_t j = 0; j < ygor_data_reader_num_series(ydr); ++j)
         {
-            fprintf(stderr, "cannot merge files with different time/data scales\n");
-            return EXIT_FAILURE;
+            const ygor_series* s = ygor_data_reader_series(ydr, j);
+
+            if (conflicting_series(series, s))
+            {
+                fprintf(stderr, "series %s has conflicting definitions\n", s->name);
+                return EXIT_FAILURE;
+            }
+
+            if (!series_defined(series, s->name))
+            {
+                series.push_back(s);
+            }
         }
     }
 
-    struct ygor_data_logger* ydl = ygor_data_logger_create(out, when_scale, data_scale);
+    const uint64_t heap_max = buffer_sz * 1048576ULL / sizeof(ygor_data_point) + 1;
+    std::cout << "heap max " << heap_max << std::endl;
+    ygor_data_logger* ydl = ygor_data_logger_create(out, &series[0], series.size());
 
     if (!ydl)
     {
@@ -115,53 +185,80 @@ main(int argc, const char* argv[])
         return EXIT_FAILURE;
     }
 
-    std::vector<heap_elem> heap;
-
-    for (size_t idx = 0; idx < iters.size(); ++idx)
+    for (size_t s = 0; s < series.size(); ++s)
     {
-        int valid = ygor_data_iterator_valid(iters[idx]);
+        bool (*heap_func)(const ygor_data_point& lhs, const ygor_data_point& rhs);
 
-        if (valid > 0)
+        if (ygor_is_precise(series[s]->indep_precision))
         {
-            ygor_data_record ydr;
-            ygor_data_iterator_read(iters[idx], &ydr);
-            heap.push_back(std::make_pair(ydr, iters[idx]));
+            heap_func = precise_heap_func;
         }
-        else if (valid < 0)
+        else
         {
-            fprintf(stderr, "error reading input\n");
-            return EXIT_FAILURE;
-        }
-    }
-
-    std::make_heap(heap.begin(), heap.end(), heap_func);
-
-    while (!heap.empty())
-    {
-        heap_elem e = heap[0];
-        std::pop_heap(heap.begin(), heap.end(), heap_func);
-        heap.pop_back();
-
-        if (ygor_data_logger_record(ydl, &e.first) < 0)
-        {
-            fprintf(stderr, "error writing output\n");
-            return EXIT_FAILURE;
+            heap_func = approximate_heap_func;
         }
 
-        ygor_data_iterator_advance(e.second);
-        int valid = ygor_data_iterator_valid(e.second);
+        std::vector<ygor_data_point> points;
 
-        if (valid > 0)
+        for (size_t r = 0; r < readers.size(); ++r)
         {
-            ygor_data_record ydr;
-            ygor_data_iterator_read(e.second, &ydr);
-            heap.push_back(std::make_pair(ydr, e.second));
-            std::push_heap(heap.begin(), heap.end(), heap_func);
+            if (!has_series(readers[r], series[s]->name))
+            {
+                continue;
+            }
+
+            ygor_data_iterator* ydi = ygor_data_iterate(readers[r], series[s]->name);
+
+            if (!ydi)
+            {
+                fprintf(stderr, "could not open series %s:%s\n", ap.args()[r], series[s]->name);
+                return EXIT_FAILURE;
+            }
+
+            int status;
+
+            while ((status = ygor_data_iterator_valid(ydi)) > 0)
+            {
+                ygor_data_point ydp;
+                ygor_data_iterator_read(ydi, &ydp);
+                ygor_data_iterator_advance(ydi);
+                assert(series_equal(*ydp.series, *series[s]));
+                ydp.series = series[s];
+                points.push_back(ydp);
+                std::push_heap(points.begin(), points.end(), heap_func);
+
+                if (points.size() > heap_max)
+                {
+                    std::pop_heap(points.begin(), points.end(), heap_func);
+
+                    if (ygor_data_logger_record(ydl, &points.back()) < 0)
+                    {
+                        fprintf(stderr, "error writing output\n");
+                        return EXIT_FAILURE;
+                    }
+
+                    points.pop_back();
+                }
+            }
+
+            if (status < 0)
+            {
+                fprintf(stderr, "error reading series %s:%s\n", ap.args()[r], series[s]->name);
+                return EXIT_FAILURE;
+            }
         }
-        else if (valid < 0)
+
+        while (!points.empty())
         {
-            fprintf(stderr, "error reading input\n");
-            return EXIT_FAILURE;
+            std::pop_heap(points.begin(), points.end(), heap_func);
+
+            if (ygor_data_logger_record(ydl, &points.back()) < 0)
+            {
+                fprintf(stderr, "error writing output\n");
+                return EXIT_FAILURE;
+            }
+
+            points.pop_back();
         }
     }
 

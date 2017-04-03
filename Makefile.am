@@ -1,4 +1,4 @@
-# Copyright (c) 2014, Robert Escriva
+# Copyright (c) 2014-2017, Robert Escriva
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -25,89 +25,90 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ACLOCAL_AMFLAGS = -I m4 ${ACLOCAL_FLAGS}
-AM_CPPFLAGS = $(PO6_CFLAGS) $(E_CFLAGS)
+
+AM_CPPFLAGS = -I${abs_top_srcdir}/include $(PO6_CFLAGS) $(E_CFLAGS)
 AM_CFLAGS   = -fvisibility=hidden $(PO6_CFLAGS) $(E_CFLAGS) $(WANAL_CFLAGS)
 AM_CXXFLAGS = -fvisibility=hidden -fvisibility-inlines-hidden $(PO6_CFLAGS) $(E_CFLAGS) $(WANAL_CXXFLAGS)
 if MAKE_NO_PRINT_DIRECTORY
 AM_MAKEFLAGS = --no-print-directory
 endif
 
-CLEANFILES =
+ygorincludedir = $(includedir)/$(PACKAGE)
+ygorexecdir = $(libexecdir)/$(PACKAGE)-$(VERSION)
 
-EXTRA_DIST  =
+EXTRA_DIST =
 EXTRA_DIST += LICENSE
 EXTRA_DIST += bin/ygor-configure
 EXTRA_DIST += bin/ygor-run
-EXTRA_DIST += bin/ygor-graph
 EXTRA_DIST += ygor/__init__.py
 EXTRA_DIST += ygor/collect.pyx
-EXTRA_DIST += ygor/graph.py
+
+ygorinclude_HEADERS =
+ygorinclude_HEADERS += include/ygor/armnod.h
+ygorinclude_HEADERS += include/ygor/data.h
+ygorinclude_HEADERS += include/ygor/guacamole.h
+
+noinst_HEADERS =
+noinst_HEADERS += common.h
+noinst_HEADERS += ygor-internal.h
+noinst_HEADERS += visibility.h
+
+lib_LTLIBRARIES = libygor.la
+libygor_la_SOURCES =
+libygor_la_SOURCES += armnod.cc
+libygor_la_SOURCES += data.cc
+libygor_la_SOURCES += guacamole.cc
+libygor_la_SOURCES += guacamole_amd64.s
+libygor_la_LIBADD =
+libygor_la_LIBADD += $(E_LIBS)
+libygor_la_LIBADD += $(PO6_LIBS)
 
 bin_PROGRAMS = bin/ygor
+ygorexec_SCRIPTS =
+ygorexec_SCRIPTS += bin/ygor-configure
+ygorexec_SCRIPTS += bin/ygor-run
+ygorexec_PROGRAMS =
+ygorexec_PROGRAMS += ygor-guacamole
+ygorexec_PROGRAMS += ygor-armnod
+ygorexec_PROGRAMS += ygor-self-measure
+ygorexec_PROGRAMS += ygor-inspect
+ygorexec_PROGRAMS += ygor-cdf
+ygorexec_PROGRAMS += ygor-timeseries
+ygorexec_PROGRAMS += ygor-merge
+
 bin_ygor_SOURCES = ygor-cli.cc
 bin_ygor_CPPFLAGS = -DYGOR_EXEC_DIR=\""$(ygorexecdir)\"" $(AM_CPPFLAGS) $(CPPFLAGS)
 bin_ygor_LDADD = $(E_LIBS) $(PO6_LIBS)
 
-ygorexecdir = $(libexecdir)/$(PACKAGE)-$(VERSION)
-ygorexec_SCRIPTS  =
-ygorexec_SCRIPTS += bin/ygor-configure
-ygorexec_SCRIPTS += bin/ygor-run
-ygorexec_SCRIPTS += bin/ygor-graph
-ygorexec_PROGRAMS  =
-ygorexec_PROGRAMS += bin/ygor-armnod
-ygorexec_PROGRAMS += bin/ygor-cdf
-ygorexec_PROGRAMS += bin/ygor-percentiles
-ygorexec_PROGRAMS += bin/ygor-dump
-ygorexec_PROGRAMS += bin/ygor-guacamole
-ygorexec_PROGRAMS += bin/ygor-merge
-ygorexec_PROGRAMS += bin/ygor-summarize
-ygorexec_PROGRAMS += bin/ygor-timeseries
-ygorexec_PROGRAMS += bin/ygor-t-test
+ygor_guacamole_SOURCES = ygor-guacamole.cc
+ygor_guacamole_LDADD = libygor.la
 
-bin_ygor_armnod_SOURCES = ygor-armnod.cc
-bin_ygor_armnod_LDADD = libygor.la $(PO6_LIBS)
+ygor_armnod_SOURCES = ygor-armnod.cc
+ygor_armnod_LDADD = libygor.la
 
-bin_ygor_cdf_SOURCES = ygor-cdf.cc
-bin_ygor_cdf_LDADD = libygor.la $(PO6_LIBS)
+ygor_self_measure_SOURCES = ygor-self-measure.cc
+ygor_self_measure_LDADD = libygor.la
 
-bin_ygor_percentiles_SOURCES = ygor-percentiles.cc
-bin_ygor_percentiles_LDADD = libygor.la $(PO6_LIBS)
+ygor_inspect_SOURCES = ygor-inspect.cc common.cc
+ygor_inspect_LDADD = libygor.la
 
-bin_ygor_dump_SOURCES = ygor-dump.cc
-bin_ygor_dump_LDADD = libygor.la $(PO6_LIBS)
+ygor_cdf_SOURCES = ygor-cdf.cc common.cc
+ygor_cdf_LDADD = libygor.la
 
-bin_ygor_guacamole_SOURCES = ygor-guacamole.cc
-bin_ygor_guacamole_LDADD = libygor.la $(PO6_LIBS)
+ygor_timeseries_SOURCES = ygor-timeseries.cc common.cc
+ygor_timeseries_LDADD = libygor.la
 
-bin_ygor_merge_SOURCES = ygor-merge.cc
-bin_ygor_merge_LDADD = libygor.la $(PO6_LIBS)
-
-bin_ygor_summarize_SOURCES = ygor-summarize.cc
-bin_ygor_summarize_LDADD = libygor.la $(PO6_LIBS)
-
-bin_ygor_timeseries_SOURCES = ygor-timeseries.cc
-bin_ygor_timeseries_LDADD = libygor.la $(PO6_LIBS)
-
-bin_ygor_t_test_SOURCES = ygor-t-test.cc
-bin_ygor_t_test_LDADD = libygor.la $(PO6_LIBS)
-
-include_HEADERS = ygor.h
-noinst_HEADERS = ygor-internal.h guacamole.h visibility.h
+ygor_merge_SOURCES = ygor-merge.cc common.cc
+ygor_merge_LDADD = libygor.la
 
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = ygor.pc
-
-lib_LTLIBRARIES = libygor.la
-
-libygor_la_SOURCES = ygor.cc armnod.cc guacamole.cc
-libygor_la_LIBADD = $(E_LIBS) $(PO6_LIBS)
 
 pkgpyexecdir = $(pyexecdir)/ygor
 pkgpyexec_DATA =
 pkgpyexec_LTLIBRARIES =
 if ENABLE_PYTHON_BINDINGS
 pkgpyexec_DATA += ygor/__init__.py
-pkgpyexec_DATA += ygor/graph.py
 pkgpyexec_LTLIBRARIES += ygor/collect.la
 endif
 
@@ -129,46 +130,3 @@ pyx_verbose_ = $(pyx_verbose_$(AM_DEFAULT_VERBOSITY))
 pyx_verbose_0 = @echo "  PYX   " $@;
 ygor/collect.c: ygor/collect.pyx
 	$(pyx_verbose)cython ygor/collect.pyx
-
-TESTS  =
-TESTS += test-salsa208-guacamole
-
-check_PROGRAMS = test-salsa208-guacamole
-
-test_salsa208_guacamole_SOURCES = test-salsa208-guacamole.cc guacamole.cc
-test_salsa208_guacamole_CPPFLAGS =
-test_salsa208_guacamole_CPPFLAGS += $(AM_CPPFLAGS)
-test_salsa208_guacamole_CPPFLAGS += $(CPPFLAGS)
-test_salsa208_guacamole_LDADD = $(E_LIBS) -lsodium
-
-##################################### Java #####################################
-
-ygor_jarfile = bindings/java/net.rescrv.ygor-$(VERSION).jar
-
-jardir = $(datadir)/java
-jar_DATA =
-if ENABLE_JAVA_BINDINGS
-lib_LTLIBRARIES += libygor-java.la
-jar_DATA += $(ygor_jarfile)
-endif
-
-CLEANFILES += $(ygor_jarfile)
-CLEANFILES += bindings/java/net/rescrv/ygor/*.class
-
-EXTRA_DIST += bindings/java/net/rescrv/ygor/DataLogger.java
-
-noinst_HEADERS += bindings/java/net_rescrv_ygor_DataLogger.h
-
-libygor_java_la_SOURCES = bindings/java/net_rescrv_ygor_DataLogger.c
-libygor_java_la_CPPFLAGS = $(JNI_CPPFLAGS) $(AM_CPPFLAGS) $(CPPFLAGS)
-libygor_java_la_CFLAGS = $(AM_CFLAGS) $(CFLAGS) -Wmissing-prototypes
-libygor_java_la_LIBADD = libygor.la
-
-JAVA_SRC_BASE=${abs_top_srcdir}/bindings/java
-JAVA_BUILD_BASE=${abs_top_builddir}/bindings/java
-JAVA_SRC_PKG=${JAVA_SRC_BASE}/net/rescrv/ygor
-JAVA_BUILD_PKG=${JAVA_BUILD_BASE}/net/rescrv/ygor
-
-$(ygor_jarfile): $(wildcard ${JAVA_SRC_PKG}/*.java)
-	javac -d ${JAVA_BUILD_BASE} ${JAVA_SRC_PKG}/*.java
-	cd ${JAVA_BUILD_BASE} && $(JAR) cvf $(JARFLAGS) ${abs_top_builddir}/${ygor_jarfile} net/rescrv/ygor/*.class

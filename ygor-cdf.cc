@@ -1,4 +1,4 @@
-// Copyright (c) 2013-2014, Robert Escriva
+// Copyright (c) 2013-2017, Robert Escriva
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -9,7 +9,7 @@
 //     * Redistributions in binary form must reproduce the above copyright
 //       notice, this list of conditions and the following disclaimer in the
 //       documentation and/or other materials provided with the distribution.
-//     * Neither the name of Ygor nor the names of its contributors may be used
+//     * Neither the name of ygor nor the names of its contributors may be used
 //       to endorse or promote products derived from this software without
 //       specific prior written permission.
 //
@@ -32,9 +32,9 @@
 // e
 #include <e/popt.h>
 
-// Ygor
-#include "ygor.h"
-#include "ygor-internal.h"
+// ygor
+#include <ygor/data.h>
+#include "common.h"
 
 int
 main(int argc, const char* argv[])
@@ -43,18 +43,18 @@ main(int argc, const char* argv[])
     bool omit_empty = false;
     e::argparser ap;
     ap.autohelp();
-    ap.option_string("<input file> [<input file> ...]");
+    ap.option_string("<input> [<input> ...]");
     ap.arg().name('e', "omit-empty").description("Omit empty data points (default: treat as 100%)").set_true(&omit_empty);
     ap.arg().name('f', "fill").description("Appends 100%% up to the given bucket (default: no fill)").as_long(&fill);
-    bucket_scale_opts bso;
-    ap.add("Units:", bso.parser());
+    bucket_options bopts;
+    ap.add("Bucket options:", bopts.parser());
 
     if (!ap.parse(argc, argv))
     {
         return EXIT_FAILURE;
     }
 
-    if (!bso.validate())
+    if (!bopts.validate())
     {
         return EXIT_FAILURE;
     }
@@ -65,36 +65,47 @@ main(int argc, const char* argv[])
         return EXIT_FAILURE;
     }
 
-    std::vector<ygor_series> cdfs;
-    cdfs.resize(ap.args_sz());
+    std::vector<series_description> series = compute_series(ap.args(), ap.args_sz());
+    std::vector<data_points> cdfs;
     uint64_t max_idx = 0;
 
-    for (size_t i = 0; i < ap.args_sz(); ++i)
+    for (size_t i = 0; i < series.size(); ++i)
     {
-        if (ygor_cdf(ap.args()[i], bso.bucket(), &cdfs[i].data, &cdfs[i].data_sz) < 0)
+        ygor_data_reader* ydr = NULL;
+        ygor_data_iterator* ydi = NULL;
+        ygor_data_point* ydp;
+        size_t ydp_sz;
+
+        if (!(ydr = ygor_data_reader_create(series[i].filename.c_str())) ||
+            !(ydi = ygor_data_iterate(ydr, series[i].series_name.c_str())) ||
+            !(ydi = ygor_data_convert_units(ydi, ygor_data_iterator_series(ydi)->indep_units, bopts.units())) ||
+            ygor_cdf(ydi, bopts.bucket(), &ydp, &ydp_sz) < 0)
         {
             fprintf(stderr, "cannot create CDF from input %s\n", ap.args()[i]);
             return EXIT_FAILURE;
         }
 
+        cdfs.push_back(data_points(ydp, ydp_sz));
         max_idx = std::max(max_idx, cdfs[i].data_sz);
+        ygor_data_iterator_destroy(ydi);
+        ygor_data_reader_destroy(ydr);
     }
 
     for (uint64_t idx = 0; ; ++idx)
     {
-        if (idx >= max_idx && bso.index_scaled(idx) > uint64_t(fill))
+        if (idx >= max_idx && bopts.bucket() * idx > (unsigned long)fill)
         {
             break;
         }
 
-        fprintf(stdout, "%ld", bso.index_scaled(idx));
+        fprintf(stdout, "%ld", bopts.bucket() * idx);
 
         for (size_t i = 0; i < cdfs.size(); ++i)
         {
             if (idx < cdfs[i].data_sz)
             {
-                assert(cdfs[i].data[idx].x == bso.index(idx));
-                fprintf(stdout, "\t%g", cdfs[i].data[idx].y);
+                assert(cdfs[i].data[idx].indep.precise == bopts.bucket() * idx);
+                fprintf(stdout, "\t%g", cdfs[i].data[idx].dep.approximate);
             }
             else
             {

@@ -1,4 +1,4 @@
-// Copyright (c) 2013-2014, Robert Escriva
+// Copyright (c) 2017, Robert Escriva
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -9,7 +9,7 @@
 //     * Redistributions in binary form must reproduce the above copyright
 //       notice, this list of conditions and the following disclaimer in the
 //       documentation and/or other materials provided with the distribution.
-//     * Neither the name of Ygor nor the names of its contributors may be used
+//     * Neither the name of ygor nor the names of its contributors may be used
 //       to endorse or promote products derived from this software without
 //       specific prior written permission.
 //
@@ -26,51 +26,55 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 // C
+#include <cmath>
 #include <cstdlib>
-
-// POSIX
-#include <errno.h>
+#include <stdint.h>
 
 // e
 #include <e/popt.h>
 
-// numbers
-#include "ygor.h"
+// ygor
+#include <ygor/data.h>
+#include "common.h"
 
 int
 main(int argc, const char* argv[])
 {
     e::argparser ap;
-    ap.option_string("<input file>");
+    ap.autohelp();
+    ap.option_string("[<data-set> ...]");
 
     if (!ap.parse(argc, argv))
     {
         return EXIT_FAILURE;
     }
 
-    if (ap.args_sz() != 1)
+    int rc = EXIT_SUCCESS;
+
+    for (size_t i = 0; i < ap.args_sz(); ++i)
     {
-        fprintf(stderr, "specify exactly one input file\n");
-        return EXIT_FAILURE;
+        ygor_data_reader* ydr = ygor_data_reader_create(ap.args()[i]);
+
+        if (!ydr)
+        {
+            fprintf(stderr, "could not open or parse %s\n", ap.args()[i]);
+            rc = EXIT_FAILURE;
+            continue;
+        }
+
+        size_t series_sz = ygor_data_reader_num_series(ydr);
+
+        for (size_t idx = 0; idx < series_sz; ++idx)
+        {
+            const ygor_series* s = ygor_data_reader_series(ydr, idx);
+            printf("%s: independent=%s@%s dependent=%s@%s\n",
+                   s->name,
+                   units_to_str(s->indep_units),
+                   precision_to_str(s->indep_precision),
+                   units_to_str(s->dep_units),
+                   precision_to_str(s->dep_precision));
+        }
     }
 
-    ygor_data_iterator* ydi = ygor_data_iterator_create(ap.args()[0]);
-    int status = 0;
-
-    while ((status = ygor_data_iterator_valid(ydi)) > 0)
-    {
-        ygor_data_record dr;
-        ygor_data_iterator_read(ydi, &dr);
-        fprintf(stdout, "series=%04x, when=%lu, data=%lu\n",
-                        dr.series, dr.when, dr.data);
-        ygor_data_iterator_advance(ydi);
-    }
-
-    if (status < 0)
-    {
-        fprintf(stderr, "cannot dump input: %s\n", strerror(errno));
-        return EXIT_FAILURE;
-    }
-
-    return EXIT_SUCCESS;
+    return rc;
 }

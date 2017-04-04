@@ -45,6 +45,7 @@
 
 // ygor
 #include <ygor/data.h>
+#include "halffloat.h"
 #include "ygor-internal.h"
 #include "visibility.h"
 
@@ -341,7 +342,8 @@ template <>
 unsigned char*
 pack_value_templ<YGOR_HALF_PRECISION>(const ygor_data_value& v, unsigned char* out)
 {
-    return e::packdoublebe(v.approximate, out); // XXX
+    uint16_t h = halffloat_compress(v.approximate);
+    return e::pack16be(h, out);
 }
 
 template <>
@@ -782,8 +784,11 @@ const unsigned char*
 unpack_value_templ<YGOR_HALF_PRECISION>(const unsigned char* in, const unsigned char* end, ygor_data_value* v)
 {
     if (!in) return NULL;
-    if (end - in < 8) return NULL;
-    return e::unpackdoublebe(in, &v->approximate); // XXX
+    if (end - in < 2) return NULL;
+    uint16_t h;
+    in = e::unpack16be(in, &h);
+    v->approximate = halffloat_decompress(h);
+    return in;
 }
 
 template <>

@@ -50,6 +50,7 @@ ygorinclude_HEADERS += include/ygor/guacamole.h
 
 noinst_HEADERS =
 noinst_HEADERS += common.h
+noinst_HEADERS += halffloat.h
 noinst_HEADERS += ygor-internal.h
 noinst_HEADERS += visibility.h
 
@@ -59,6 +60,7 @@ libygor_la_SOURCES += armnod.cc
 libygor_la_SOURCES += data.cc
 libygor_la_SOURCES += guacamole.cc
 libygor_la_SOURCES += guacamole_amd64.s
+libygor_la_SOURCES += halffloat.cc
 libygor_la_LIBADD =
 libygor_la_LIBADD += $(E_LIBS)
 libygor_la_LIBADD += $(PO6_LIBS)

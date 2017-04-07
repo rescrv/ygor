@@ -81,6 +81,12 @@ static const char alphabet_hex[] = "0123456789abcdef";
 // a string_chooser returns a uint64_t indicating the seed to be used for
 // generating the next string, and tracks when generation is done
 
+static uint64_t
+distribute(uint64_t x, uint64_t c)
+{
+    return x * (UINT64_MAX / c);
+}
+
 struct string_chooser
 {
     string_chooser() {}
@@ -102,7 +108,7 @@ struct string_chooser_fixed : public string_chooser
 
     virtual string_chooser* copy() { return new string_chooser_fixed(m_size); }
     virtual uint64_t seed(guacamole* g)
-    { double d = guacamole_double(g); return m_size * d; }
+    { double d = guacamole_double(g); return distribute(m_size * d, m_size); }
     virtual bool done() { return false; }
 
     private:
@@ -119,7 +125,7 @@ struct string_chooser_fixed_once : public string_chooser
     virtual ~string_chooser_fixed_once() throw () {}
 
     virtual string_chooser* copy() { return new string_chooser_fixed_once(m_size, m_start, m_limit); }
-    virtual uint64_t seed(guacamole*) { return m_idx++; }
+    virtual uint64_t seed(guacamole*) { return distribute(m_idx++, m_size); }
     virtual bool done() { return m_idx >= m_limit; }
 
     private:
@@ -139,7 +145,7 @@ struct string_chooser_fixed_zipf : public string_chooser
     virtual ~string_chooser_fixed_zipf() throw () {}
 
     virtual string_chooser* copy() { return new string_chooser_fixed_zipf(m_zp.n, m_zp.theta); }
-    virtual uint64_t seed(guacamole* g) { return guacamole_zipf(g, &m_zp); }
+    virtual uint64_t seed(guacamole* g) { return distribute(guacamole_zipf(g, &m_zp), m_zp.n); }
     virtual bool done() { return false; }
 
     private:

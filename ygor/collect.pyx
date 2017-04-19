@@ -101,7 +101,7 @@ precision_conversion = {'precise': YGOR_PRECISE_INTEGER,
 
 cdef class __series:
 
-    cdef str name
+    cdef bytes name
     cdef ygor_series series
 
 cdef class DataLogger:
@@ -112,12 +112,12 @@ cdef class DataLogger:
     cdef const ygor_series** ys;
     cdef size_t ys_sz
 
-    def __cinit__(self, output, series):
+    def __cinit__(self, str output, series):
         self.dl = NULL
+        self.series = {}
+        self.series_idxs = {}
         self.ys = <const ygor_series**>malloc(sizeof(const ygor_series*) * len(series))
         self.ys_sz = len(series)
-        if isinstance(output, str):
-            output = output.encode('utf8')
         for idx, ser in enumerate(series):
             if ser.indep_units not in units_conversion.keys():
                 raise ValueError("invalid independent units")
@@ -130,7 +130,7 @@ cdef class DataLogger:
             if ser.name in self.series:
                 raise KeyError("series defined twice")
             s = __series()
-            s.name = ser.name
+            s.name = ser.name.encode('utf8')
             s.series.name = s.name
             s.series.indep_units = units_conversion[ser.indep_units]
             s.series.indep_precision = precision_conversion[ser.indep_precision]
@@ -139,7 +139,8 @@ cdef class DataLogger:
             self.series[s.name] = s
             self.series_idxs[s.name] = idx
             self.ys[idx] = &s.series
-        self.dl = ygor_data_logger_create(output, self.ys, self.ys_sz)
+        out = output.encode('utf8')
+        self.dl = ygor_data_logger_create(out, self.ys, self.ys_sz)
         if not self.dl:
             raise RuntimeError("error creating data logger")
 
@@ -154,7 +155,8 @@ cdef class DataLogger:
         ygor_data_logger_flush_and_destroy(self.dl)
         self.dl = NULL
 
-    def record(self, str series, indep, dep):
+    def record(self, str _series, indep, dep):
+        cdef bytes series = _series.encode('utf8')
         assert series in self.series
         idx = self.series_idxs[series]
         cdef ygor_data_point ydp

@@ -267,6 +267,7 @@ class SSH(object):
         def __init__(self, metadata, command):
             self.location = metadata.location
             self.ssh = paramiko.SSHClient()
+            self.ssh.load_system_host_keys()
             self.ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             self.ssh.connect(metadata.location, username=metadata.username)
             self.transport = self.ssh.get_transport()

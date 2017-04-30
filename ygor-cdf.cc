@@ -39,7 +39,7 @@
 int
 main(int argc, const char* argv[])
 {
-    long fill = 0;
+    long fill = -1;
     bool omit_empty = false;
     e::argparser ap;
     ap.autohelp();
@@ -93,7 +93,7 @@ main(int argc, const char* argv[])
 
     for (uint64_t idx = 0; ; ++idx)
     {
-        if (idx >= max_idx && bopts.bucket() * idx > (unsigned long)fill)
+        if (idx >= max_idx && (int64_t)(bopts.bucket() * idx) > (int64_t)fill)
         {
             break;
         }

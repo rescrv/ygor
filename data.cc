@@ -621,38 +621,47 @@ ygor_data_reader :: init(const char* name)
 
     while (true)
     {
-        size_t amt = fread(buffer + used, 1, 512 - used, fin);
-        used += amt;
         char* ptr = (char*)memchr(buffer, '\0', used);
 
-        if (!ptr || ptr + 4 > buffer + used)
+        if (!ptr && feof(fin))
         {
             return false;
         }
+        else if (!ptr)
+        {
+            size_t amt = fread(buffer + used, 1, 512 - used, fin);
 
-        if (ptr == buffer)
+            if (amt == 0 || ferror(fin))
+            {
+                return false;
+            }
+
+            used += amt;
+        }
+        else if (ptr == buffer)
         {
             data_offset = ftell(fin) - used + 1;
             break;
         }
-
-        names.push_back(buffer);
-        series.push_back(ygor_series());
-        series.back().name = names.back().c_str();
-        series.back().indep_units = (ygor_units)ptr[1];
-        series.back().indep_precision = (ygor_precision)ptr[2];
-        series.back().dep_units = (ygor_units)ptr[3];
-        series.back().dep_precision = (ygor_precision)ptr[4];
-
-        if (ferror(fin) || feof(fin))
+        else if (ptr + 4 > buffer + used)
         {
             return false;
         }
+        else
+        {
+            names.push_back(buffer);
+            series.push_back(ygor_series());
+            series.back().name = names.back().c_str();
+            series.back().indep_units = (ygor_units)ptr[1];
+            series.back().indep_precision = (ygor_precision)ptr[2];
+            series.back().dep_units = (ygor_units)ptr[3];
+            series.back().dep_precision = (ygor_precision)ptr[4];
 
-        char* tmp = ptr + 5;
-        size_t rem = tmp - buffer;
-        memmove(buffer, tmp, used - rem);
-        used -= rem;
+            char* tmp = ptr + 5;
+            size_t rem = tmp - buffer;
+            memmove(buffer, tmp, used - rem);
+            used -= rem;
+        }
     }
 
     return true;
@@ -1318,6 +1327,13 @@ ygor_cdf(ygor_data_iterator* ydi, uint64_t step_value,
     if (status < 0)
     {
         return -1;
+    }
+
+    if (num_points == 0)
+    {
+        *data = NULL;
+        *data_sz = 0;
+        return 0;
     }
 
     uint64_t sum = 0;

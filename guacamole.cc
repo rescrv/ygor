@@ -41,17 +41,17 @@
 extern "C"
 {
 
-YGOR_API struct guacamole*
+YGOR_API guacamole*
 guacamole_create(uint64_t seed)
 {
-    struct guacamole* g = new (std::nothrow) guacamole();
+    guacamole* g = new (std::nothrow) guacamole();
     if (!g) return NULL;
     guacamole_seed(g, seed);
     return g;
 }
 
 YGOR_API void
-guacamole_destroy(struct guacamole* g)
+guacamole_destroy(guacamole* g)
 {
     delete g;
 }
@@ -60,7 +60,7 @@ void guacamole_mash_c(uint64_t number, uint32_t output[16]);
 void guacamole_mash_sse41(uint64_t number, uint32_t output[16]);
 
 YGOR_API void
-guacamole_seed(struct guacamole* g, uint64_t seed)
+guacamole_seed(guacamole* g, uint64_t seed)
 {
     g->nonce = seed;
     g->index = 0;
@@ -68,7 +68,7 @@ guacamole_seed(struct guacamole* g, uint64_t seed)
 }
 
 YGOR_API void
-guacamole_generate(struct guacamole* g, void* _bytes, size_t bytes_sz)
+guacamole_generate(guacamole* g, void* _bytes, size_t bytes_sz)
 {
     unsigned char* bytes = (unsigned char*)_bytes;
     assert(g->index < 64);
@@ -192,7 +192,7 @@ static initializer init;
  */
 
 uint32_t
-guacamole_uint32(struct guacamole* g)
+guacamole_uint32(guacamole* g)
 {
     uint32_t x;
     guacamole_generate(g, &x, sizeof(x));
@@ -204,7 +204,7 @@ extern "C"
 
 /* function was called rk_double in numpy */
 YGOR_API double
-guacamole_double(struct guacamole* g)
+guacamole_double(guacamole* g)
 {
     /* shifts : 67108864 = 0x4000000, 9007199254740992 = 0x20000000000000 */
     long a = guacamole_uint32(g) >> 5, b = guacamole_uint32(g) >> 6;
@@ -231,7 +231,7 @@ zipf_zeta(uint64_t n, double theta)
 }
 
 void
-zipf_params(struct guacamole_zipf_params* p)
+zipf_params(guacamole_zipf_params* p)
 {
     p->zetan = zipf_zeta(p->n, p->theta);
     p->zeta2 = zipf_zeta(p->theta, 2);
@@ -243,7 +243,7 @@ extern "C"
 {
 
 YGOR_API void
-guacamole_zipf_init_alpha(uint64_t n, double alpha, struct guacamole_zipf_params* p)
+guacamole_zipf_init_alpha(uint64_t n, double alpha, guacamole_zipf_params* p)
 {
     p->n = n;
     p->alpha = alpha;
@@ -252,7 +252,7 @@ guacamole_zipf_init_alpha(uint64_t n, double alpha, struct guacamole_zipf_params
 }
 
 YGOR_API void
-guacamole_zipf_init_theta(uint64_t n, double theta, struct guacamole_zipf_params* p)
+guacamole_zipf_init_theta(uint64_t n, double theta, guacamole_zipf_params* p)
 {
     p->n = n;
     p->theta = theta;
@@ -261,7 +261,7 @@ guacamole_zipf_init_theta(uint64_t n, double theta, struct guacamole_zipf_params
 }
 
 YGOR_API uint64_t
-guacamole_zipf(struct guacamole* g, struct guacamole_zipf_params* p)
+guacamole_zipf(guacamole* g, guacamole_zipf_params* p)
 {
     double u = guacamole_double(g);
     double uz = u * p->zetan;
@@ -861,7 +861,7 @@ Blowfish_expandstate(struct BlowfishContext *c, const uint8_t *data, uint16_t da
 
 }
 
-YGOR_API struct guacamole_scrambler*
+YGOR_API guacamole_scrambler*
 guacamole_scrambler_create(uint64_t seed)
 {
     struct BlowfishContext* bc = (BlowfishContext*)malloc(sizeof(BlowfishContext));
@@ -872,13 +872,13 @@ guacamole_scrambler_create(uint64_t seed)
 }
 
 YGOR_API void
-guacamole_scrambler_destroy(struct guacamole_scrambler* gs)
+guacamole_scrambler_destroy(guacamole_scrambler* gs)
 {
     free(gs);
 }
 
 YGOR_API void
-guacamole_scrambler_change(struct guacamole_scrambler* gs, uint64_t seed)
+guacamole_scrambler_change(guacamole_scrambler* gs, uint64_t seed)
 {
     struct BlowfishContext* bc = (BlowfishContext*)gs;
     unsigned char buf[8];
@@ -897,7 +897,7 @@ guacamole_scrambler_change(struct guacamole_scrambler* gs, uint64_t seed)
 }
 
 YGOR_API uint64_t
-guacamole_scramble(struct guacamole_scrambler* gs, uint64_t value)
+guacamole_scramble(guacamole_scrambler* gs, uint64_t value)
 {
     uint32_t xl = (value >> 32) & 0xffffffffU;
     uint32_t xr = value & 0xffffffffU;

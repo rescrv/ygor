@@ -31,6 +31,9 @@
 // POSIX
 #include <unistd.h>
 
+// e
+#include <e/popt.h>
+
 // ygor
 #include <ygor/guacamole.h>
 
@@ -39,27 +42,51 @@
 int
 main(int argc, const char* argv[])
 {
-    guacamole* g = NULL;
+    long benchmark = 0;
+    long seed = 0;
+    e::argparser ap;
+    ap.arg().name('b', "benchmark")
+            .description("run in benchmark mode (default: no)")
+            .as_long(&benchmark);
+    ap.arg().name('s', "seed")
+            .description("value to seed the rng (default: 0)")
+            .as_long(&seed);
+    ap.autohelp();
 
-    if (argc > 1)
+    if (!ap.parse(argc, argv))
     {
-        uint64_t x = strtoull(argv[1], NULL, 10);
-        g = guacamole_create(x);
+        return EXIT_FAILURE;
+    }
+
+    if (ap.args_sz() > 0)
+    {
+        ap.usage();
+        std::cerr << "\nerror:  command takes no positional arguments" << std::endl;
+        return EXIT_FAILURE;
+    }
+
+    guacamole* g = guacamole_create(seed);
+    char buf[BUF_SZ];
+
+    if (benchmark > 0)
+    {
+        while (benchmark > 0)
+        {
+            const size_t gen = benchmark < BUF_SZ ? benchmark : BUF_SZ;
+            guacamole_generate(g, buf, gen);
+            benchmark -= gen;
+        }
     }
     else
     {
-        g = guacamole_create(0);
-    }
-
-    char buf[BUF_SZ];
-
-    while (true)
-    {
-        guacamole_generate(g, buf, BUF_SZ);
-
-        if (write(STDOUT_FILENO, buf, BUF_SZ) < 0)
+        while (true)
         {
-            break;
+            guacamole_generate(g, buf, BUF_SZ);
+
+            if (write(STDOUT_FILENO, buf, BUF_SZ) < 0)
+            {
+                break;
+            }
         }
     }
 

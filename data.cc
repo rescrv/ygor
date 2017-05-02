@@ -25,7 +25,10 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+#define __STDC_LIMIT_MACROS
+
 // C
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -45,6 +48,7 @@
 
 // ygor
 #include <ygor/data.h>
+#include <ygor/guacamole.h>
 #include "halffloat.h"
 #include "ygor-internal.h"
 #include "visibility.h"
@@ -676,6 +680,7 @@ struct ygor_data_iterator
     virtual int valid() = 0;
     virtual void advance() = 0;
     virtual void read(ygor_data_point* ydp) = 0;
+    virtual int rewind() = 0;
 };
 
 ygor_data_iterator :: ygor_data_iterator()
@@ -697,6 +702,7 @@ struct series_iterator : public ygor_data_iterator
     virtual int valid();
     virtual void advance();
     virtual void read(ygor_data_point* ydp);
+    virtual int rewind();
 
     bool init(ygor_series* s, size_t idx, const char* input, off_t offset);
     bool read(unsigned char* buf, size_t buf_sz);
@@ -704,6 +710,7 @@ struct series_iterator : public ygor_data_iterator
     ygor_series* m_series;
     size_t m_series_idx;
     FILE* m_input;
+    off_t m_offset;
 
     std::vector<ygor_data_point> m_data;
     size_t m_data_idx;
@@ -769,6 +776,12 @@ YGOR_API void
 ygor_data_iterator_advance(ygor_data_iterator* ydi)
 {
     return ydi->advance();
+}
+
+YGOR_API int
+ygor_data_iterator_rewind(ygor_data_iterator* ydi)
+{
+    return ydi->rewind();
 }
 
 YGOR_API void
@@ -940,6 +953,7 @@ series_iterator :: series_iterator()
     : m_series(NULL)
     , m_series_idx(0)
     , m_input(NULL)
+    , m_offset(0)
     , m_data()
     , m_data_idx(0)
     , m_primed(false)
@@ -1061,11 +1075,23 @@ series_iterator :: read(ygor_data_point* ydp)
     *ydp = m_data[m_data_idx];
 }
 
+int
+series_iterator :: rewind()
+{
+    m_data.clear();
+    m_data_idx = 0;
+    m_primed = false;
+    m_error = false;
+    m_eof = false;
+    return fseek(m_input, m_offset, SEEK_SET) >= 0 ? 0 : -1;
+}
+
 bool
 series_iterator :: init(ygor_series* s, size_t idx, const char* name, off_t offset)
 {
     m_series = s;
     m_series_idx = idx;
+    m_offset = offset;
     m_unpack = unpack_func(m_series);
     m_input = fopen(name, "r");
 
@@ -1093,6 +1119,55 @@ series_iterator :: read(unsigned char* buf, size_t buf_sz)
     }
 
     return true;
+}
+
+YGOR_API int
+ygor_data_iterator_sample(ygor_data_iterator* ydi,
+                          ygor_data_point* ydp, size_t ydp_sz,
+                          size_t* k, size_t* n)
+{
+    if (ydp_sz <= 0)
+    {
+        errno = EINVAL;
+        return -1;
+    }
+
+    guacamole g;
+    guacamole_seed(&g, (intptr_t)ydi);
+    size_t elem = 0;
+    int status = 0;
+
+    while ((status = ygor_data_iterator_valid(ydi)) > 0)
+    {
+        ygor_data_point p;
+        ygor_data_iterator_read(ydi, &p);
+        ygor_data_iterator_advance(ydi);
+
+        if (elem < ydp_sz)
+        {
+            ydp[elem] = p;
+        }
+        else
+        {
+            size_t idx = guacamole_double(&g) * elem;
+
+            if (idx < ydp_sz)
+            {
+                ydp[idx] = p;
+            }
+        }
+
+        ++elem;
+    }
+
+    if (status < 0)
+    {
+        return -1;
+    }
+
+    *n = elem;
+    *k = std::min(ydp_sz, *n);
+    return 0;
 }
 
 struct convert
@@ -1169,6 +1244,7 @@ struct conversion_iterator : public ygor_data_iterator
     virtual int valid();
     virtual void advance();
     virtual void read(ygor_data_point* ydp);
+    virtual int rewind();
 
     ygor_data_iterator* m_it;
     ygor_series m_series;
@@ -1278,6 +1354,85 @@ conversion_iterator :: read(ygor_data_point* ydp)
     ydp->series = &m_series;
 }
 
+int
+conversion_iterator :: rewind()
+{
+    return m_it->rewind();
+}
+
+bool
+compare_by_precise_indep(const ygor_data_point& lhs, const ygor_data_point& rhs)
+{
+    return lhs.indep.precise < rhs.indep.precise;
+}
+
+bool
+compare_by_approx_indep(const ygor_data_point& lhs, const ygor_data_point& rhs)
+{
+    return lhs.indep.approximate < rhs.indep.approximate;
+}
+
+typedef bool (*cmp_indep_t)(const ygor_data_point&, const ygor_data_point&);
+
+cmp_indep_t
+compare_by_indep(ygor_precision indep_precision)
+{
+    switch (indep_precision)
+    {
+        case YGOR_PRECISE_INTEGER:
+            return compare_by_precise_indep;
+        case YGOR_HALF_PRECISION:
+        case YGOR_SINGLE_PRECISION:
+        case YGOR_DOUBLE_PRECISION:
+            return compare_by_approx_indep;
+        default:
+            abort();
+    }
+}
+
+bool
+compare_by_precise_dep(const ygor_data_point& lhs, const ygor_data_point& rhs)
+{
+    return lhs.dep.precise < rhs.dep.precise;
+}
+
+bool
+compare_by_approx_dep(const ygor_data_point& lhs, const ygor_data_point& rhs)
+{
+    return lhs.dep.approximate < rhs.dep.approximate;
+}
+
+typedef bool (*cmp_dep_t)(const ygor_data_point&, const ygor_data_point&);
+
+cmp_dep_t
+compare_by_dep(ygor_precision dep_precision)
+{
+    switch (dep_precision)
+    {
+        case YGOR_PRECISE_INTEGER:
+            return compare_by_precise_dep;
+        case YGOR_HALF_PRECISION:
+        case YGOR_SINGLE_PRECISION:
+        case YGOR_DOUBLE_PRECISION:
+            return compare_by_approx_dep;
+        default:
+            abort();
+    }
+}
+
+double
+extract_dep_double(const ygor_data_point& ydp)
+{
+    double value = ydp.dep.precise;
+
+    if (!ygor_is_precise(ydp.series->dep_precision))
+    {
+        value = ydp.dep.approximate;
+    }
+
+    return value;
+}
+
 YGOR_API int
 ygor_cdf(ygor_data_iterator* ydi, uint64_t step_value,
          ygor_data_point** data, uint64_t* data_sz)
@@ -1297,13 +1452,7 @@ ygor_cdf(ygor_data_iterator* ydi, uint64_t step_value,
         ygor_data_point ydp;
         ygor_data_iterator_read(ydi, &ydp);
         ygor_data_iterator_advance(ydi);
-        double value = ydp.dep.precise;
-
-        if (!ygor_is_precise(ydp.series->dep_precision))
-        {
-            value = ydp.dep.approximate;
-        }
-
+        double value = extract_dep_double(ydp);
         size_t idx = 0;
 
         while (points[idx].indep.precise < value)
@@ -1352,10 +1501,178 @@ ygor_cdf(ygor_data_iterator* ydi, uint64_t step_value,
     return 0;
 }
 
-bool
-compare_by_precise_indep(const ygor_data_point& lhs, const ygor_data_point& rhs)
+#define PERCENTILE_BUFFER_SZ (1ULL << 10)
+
+YGOR_API int
+ygor_percentile(ygor_data_iterator* ydi, double percentile, double* value)
 {
-    return lhs.indep.precise < rhs.indep.precise;
+    if (percentile <= 0 || percentile > 1)
+    {
+        errno = EINVAL;
+        return -1;
+    }
+
+    std::vector<ygor_data_point> sampled(PERCENTILE_BUFFER_SZ);
+    size_t k = 0;
+    size_t n = 0;
+
+    if (ygor_data_iterator_sample(ydi, &sampled[0], PERCENTILE_BUFFER_SZ, &k, &n) < 0)
+    {
+        return -1;
+    }
+
+    assert(k <= n);
+    cmp_indep_t cmp = compare_by_dep(ygor_data_iterator_series(ydi)->dep_precision);
+    std::sort(&sampled[0], &sampled[0] + k, cmp);
+
+    if (k == n)
+    {
+        if (n == 0)
+        {
+            *value = NAN;
+            return 0;
+        }
+
+        size_t which = (n - 1) * percentile;
+        *value = extract_dep_double(sampled[which]);
+        return 0;
+    }
+
+    const size_t window = PERCENTILE_BUFFER_SZ * .25 * k / n;
+    const size_t center = k * percentile;
+    size_t lower_cutoff_idx = center > window ? center - window : 0;
+    size_t upper_cutoff_idx = std::min(center + 3 * window, k);
+    double lower_cutoff = -INFINITY;
+    double upper_cutoff = INFINITY;
+
+    if (lower_cutoff_idx > 0 && lower_cutoff_idx <= upper_cutoff_idx)
+    {
+        assert(lower_cutoff_idx < k);
+        lower_cutoff = extract_dep_double(sampled[lower_cutoff_idx]);
+    }
+
+    if (upper_cutoff_idx < k && lower_cutoff_idx < upper_cutoff_idx)
+    {
+        upper_cutoff = extract_dep_double(sampled[upper_cutoff_idx]);
+    }
+    else if (upper_cutoff_idx + 1 < k && lower_cutoff_idx == upper_cutoff_idx)
+    {
+        upper_cutoff = extract_dep_double(sampled[upper_cutoff_idx + 1]);
+    }
+
+    std::vector<double> values(PERCENTILE_BUFFER_SZ);
+
+    for (size_t iteration = 0; ; ++iteration)
+    {
+        if (ygor_data_iterator_rewind(ydi) < 0)
+        {
+            return -1;
+        }
+
+        assert(lower_cutoff <= upper_cutoff);
+        uint64_t lower_count = 0;
+        uint64_t upper_count = 0;
+        size_t idx = 0;
+        int status = 0;
+
+        while ((status = ygor_data_iterator_valid(ydi)) > 0)
+        {
+            if (idx >= values.size())
+            {
+                std::sort(values.begin(), values.end());
+
+                if (values[0] >= values[idx / 4])
+                {
+                    values.resize(values.size() * 2);
+                }
+                else
+                {
+                    const double* start = &values[0];
+                    const double* limit = start + idx;
+                    const double* first = std::upper_bound(start, limit, lower_cutoff);
+                    assert(first < limit);
+                    const double* cut = first + (limit - first) / 2;
+                    assert(cut < limit);
+                    upper_cutoff = *cut;
+                    upper_count += limit - cut;
+                    idx = cut - start;
+                }
+            }
+
+            assert(idx < values.size());
+            ygor_data_point p;
+            ygor_data_iterator_read(ydi, &p);
+            ygor_data_iterator_advance(ydi);
+            double v = extract_dep_double(p);
+
+            if (v < lower_cutoff)
+            {
+                ++lower_count;
+            }
+            // compare to lower_cutoff to correct for when 
+            // lower_cutoff == upper_cutoff
+            else if (v > lower_cutoff && v >= upper_cutoff)
+            {
+                ++upper_count;
+            }
+            else
+            {
+                assert(idx < values.size());
+                values[idx] = v;
+                ++idx;
+            }
+        }
+
+        if (status < 0)
+        {
+            return -1;
+        }
+
+        if (idx + lower_count + upper_count != n)
+        {
+            abort(); // XXX
+        }
+
+        const size_t which = (n - 1) * percentile;
+        const ssize_t adj = window * 2;
+        std::sort(&values[0], &values[0] + idx);
+
+        if (which < lower_count)
+        {
+            if (idx == 0)
+            {
+                values[0] = upper_cutoff;
+                idx = 1;
+            }
+
+            lower_cutoff = -INFINITY;
+            upper_cutoff = *std::min_element(&values[0], &values[0] + idx);
+            std::vector<ygor_data_point>::iterator it = sampled.begin();
+
+            while (it + adj < sampled.end() && extract_dep_double(*(it + adj)) < upper_cutoff)
+            {
+                lower_cutoff = extract_dep_double(*it);
+                ++it;
+            }
+        }
+        else if (idx == 0 || which - lower_count >= idx)
+        {
+            lower_cutoff = upper_cutoff;
+            upper_cutoff = INFINITY;
+            std::vector<ygor_data_point>::reverse_iterator it = sampled.rbegin();
+
+            while (it + adj < sampled.rend() && extract_dep_double(*(it + adj)) > lower_cutoff)
+            {
+                upper_cutoff = extract_dep_double(*it);
+                ++it;
+            }
+        }
+        else
+        {
+            *value = values[which - lower_count];
+            return 0;
+        }
+    }
 }
 
 YGOR_API int

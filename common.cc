@@ -178,6 +178,36 @@ data_points :: data_points(ygor_data_point* _data, uint64_t _data_sz)
 {
 }
 
+scale_options :: scale_options()
+    : m_ap()
+    , m_units_str("ms")
+    , m_units()
+{
+    m_ap.arg().name('u', "units")
+              .description("Units (default: ms)")
+              .as_string(&m_units_str);
+}
+
+const e::argparser&
+scale_options :: parser()
+{
+    return m_ap;
+}
+
+ygor_units
+scale_options :: units()
+{
+    bool valid = validate();
+    assert(valid);
+    return m_units;
+}
+
+bool
+scale_options :: validate()
+{
+    return str_to_units(m_units_str, &m_units);
+}
+
 bucket_options :: bucket_options()
     : m_ap()
     , m_bucket_str("1ms")

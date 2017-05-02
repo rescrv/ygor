@@ -43,6 +43,17 @@ extern "C"
 {
 #endif /* __cplusplus */
 
+struct guacamole
+{
+    uint64_t nonce;
+    unsigned index;
+    union {
+        uint32_t u32[16];
+        uint32_t u32v[16][4];
+        unsigned char byte[256];
+    } __attribute__ ((aligned (64))) buffer;
+};
+
 int ygor_is_precise(enum ygor_precision p);
 
 int ygor_units_compatible(enum ygor_units from, enum ygor_units to);

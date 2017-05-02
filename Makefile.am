@@ -75,6 +75,7 @@ ygorexec_PROGRAMS += ygor-armnod
 ygorexec_PROGRAMS += ygor-self-measure
 ygorexec_PROGRAMS += ygor-inspect
 ygorexec_PROGRAMS += ygor-cdf
+ygorexec_PROGRAMS += ygor-percentile
 ygorexec_PROGRAMS += ygor-timeseries
 ygorexec_PROGRAMS += ygor-merge
 
@@ -96,6 +97,9 @@ ygor_inspect_LDADD = libygor.la
 
 ygor_cdf_SOURCES = ygor-cdf.cc common.cc
 ygor_cdf_LDADD = libygor.la
+
+ygor_percentile_SOURCES = ygor-percentile.cc common.cc
+ygor_percentile_LDADD = libygor.la
 
 ygor_timeseries_SOURCES = ygor-timeseries.cc common.cc
 ygor_timeseries_LDADD = libygor.la

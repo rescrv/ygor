@@ -104,12 +104,17 @@ int ygor_data_iterator_valid(struct ygor_data_iterator* ydi);
 void ygor_data_iterator_advance(struct ygor_data_iterator* ydi);
 void ygor_data_iterator_read(struct ygor_data_iterator* ydi,
                              struct ygor_data_point* ydp);
+int ygor_data_iterator_rewind(struct ygor_data_iterator* ydi);
+int ygor_data_iterator_sample(struct ygor_data_iterator* ydi,
+                              struct ygor_data_point* ydp, size_t ydp_sz,
+                              size_t* k, size_t* n);
 struct ygor_data_iterator* ygor_data_convert_units(struct ygor_data_iterator* ydi,
                                                    enum ygor_units new_indep_units,
                                                    enum ygor_units new_dep_units);
 
 int ygor_cdf(struct ygor_data_iterator* ydi, uint64_t step_value,
              struct ygor_data_point** data, uint64_t* data_sz);
+int ygor_percentile(struct ygor_data_iterator* ydi, double percentile, double* value);
 int ygor_timeseries(struct ygor_data_iterator* ydi, uint64_t step_value,
                     struct ygor_data_point** data, uint64_t* data_sz);
 

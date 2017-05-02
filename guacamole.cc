@@ -35,21 +35,11 @@
 
 // ygor
 #include <ygor/guacamole.h>
+#include "ygor-internal.h"
 #include "visibility.h"
 
 extern "C"
 {
-
-struct guacamole
-{
-    uint64_t nonce;
-    unsigned index;
-    union {
-        uint32_t u32[16];
-        uint32_t u32v[16][4];
-        unsigned char byte[256];
-    } __attribute__ ((aligned (64))) buffer;
-};
 
 YGOR_API struct guacamole*
 guacamole_create(uint64_t seed)

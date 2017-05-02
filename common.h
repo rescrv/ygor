@@ -63,6 +63,26 @@ struct data_points
     uint64_t data_sz;
 };
 
+class scale_options
+{
+    public:
+        scale_options();
+
+    public:
+        const e::argparser& parser();
+        ygor_units units();
+        bool validate();
+
+    private:
+        scale_options(const scale_options&);
+        scale_options& operator = (const scale_options&);
+
+    private:
+        e::argparser m_ap;
+        const char* m_units_str;
+        ygor_units m_units;
+};
+
 class bucket_options
 {
     public:
